@@ -1,0 +1,272 @@
+// Domain terms: see GLOSSARY.md. Connection URL lives in prisma.config.ts (Prisma 7).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Better Auth (core + admin plugin) ──────────────────────────────
+// shortcut: hand-written to match Better Auth's Prisma output; re-run `npx @better-auth/cli generate` after installing it and diff.
+
+model User {
+  id            String    @id
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  role          String    @default("user") // "user" | "admin"
+  banned        Boolean   @default(false)
+  banReason     String?
+  banExpires    DateTime?
+  deletedAt     DateTime? // account deletion anonymizes the row instead of removing it
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  sessions        Session[]
+  accounts        Account[]
+  organizedEvents Event[]       @relation("OrganizedEvents")
+  reservations    Reservation[]
+  reports         Report[]
+  uploads         Upload[]
+}
+
+model Session {
+  id             String   @id
+  token          String   @unique
+  expiresAt      DateTime
+  ipAddress      String?
+  userAgent      String?
+  impersonatedBy String?
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+}
+
+// ─── Events ─────────────────────────────────────────────────────────
+
+enum EventKind {
+  LISTED
+  HOSTED
+}
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  UNDER_REVIEW
+  CANCELLED
+  REMOVED
+}
+
+enum ListedSource {
+  MANUAL
+  IMPORTED
+}
+
+enum ReviewReason {
+  AUTO_CHECK
+  REPORTED
+}
+
+model Event {
+  id          String      @id @default(uuid(7)) @db.Uuid
+  slug        String      @unique // fixed at creation; lookups use its id suffix
+  kind        EventKind
+  status      EventStatus
+  title       String
+  description String // Markdown, rendered with raw HTML disabled
+
+  categoryId String   @db.Uuid
+  category   Category @relation(fields: [categoryId], references: [id])
+
+  isOnline     Boolean
+  cityId       String? @db.Uuid // offline only
+  city         City?   @relation(fields: [cityId], references: [id])
+  venueName    String?
+  venueAddress String?
+  onlineUrl    String? // Hosted + online only; shown to Attendees only
+
+  startsAt      DateTime @db.Timestamptz(3)
+  endsAt        DateTime @db.Timestamptz(3)
+  timeZone      String // IANA, e.g. "Asia/Jakarta"
+  coverImageKey String? // R2 object key, never the file itself
+
+  // Hosted only
+  organizerId   String?
+  organizer     User?   @relation("OrganizedEvents", fields: [organizerId], references: [id])
+  capacity      Int? // null = unlimited
+  reservedCount Int     @default(0)
+
+  // Listed only
+  presenterName String?
+  officialUrl   String?
+  source        ListedSource?
+  sourceUrl     String? // used by the future scraper to detect duplicates
+
+  // Moderation
+  reviewReason  ReviewReason?
+  removedReason String?
+  removedAt     DateTime?
+  cancelledAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tags         EventTag[]
+  reservations Reservation[]
+  reports      Report[]
+
+  @@index([status, startsAt])
+  @@index([categoryId, startsAt])
+  @@index([cityId, startsAt])
+  @@index([organizerId])
+  @@index([sourceUrl])
+}
+
+// Prisma can't express CHECK constraints; add these to the first migration's SQL by hand:
+//   ALTER TABLE "Event" ADD CONSTRAINT event_hosted_has_organizer CHECK ((kind = 'HOSTED') = ("organizerId" IS NOT NULL));
+//   ALTER TABLE "Event" ADD CONSTRAINT event_offline_has_city      CHECK ("isOnline" OR "cityId" IS NOT NULL);
+//   ALTER TABLE "Event" ADD CONSTRAINT event_ends_after_start      CHECK ("endsAt" > "startsAt");
+//   ALTER TABLE "Event" ADD CONSTRAINT event_capacity_respected    CHECK (capacity IS NULL OR "reservedCount" <= capacity);
+//   ALTER TABLE "Event" ADD CONSTRAINT event_reserved_non_negative CHECK ("reservedCount" >= 0);
+
+model Category {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  name       String    @unique
+  sortOrder  Int       @default(0)
+  archivedAt DateTime? // archived instead of deleted while Events use it
+  events     Event[]
+}
+
+model City {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  name       String
+  province   String
+  archivedAt DateTime?
+  events     Event[]
+
+  @@unique([name, province])
+}
+
+model Tag {
+  id     String     @id @default(uuid(7)) @db.Uuid
+  name   String     @unique // stored lowercase, trimmed
+  events EventTag[]
+}
+
+model EventTag {
+  eventId String @db.Uuid
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  tagId   String @db.Uuid
+  tag     Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, tagId])
+  @@index([tagId])
+}
+
+// ─── Joining ────────────────────────────────────────────────────────
+
+enum ReservationStatus {
+  ACTIVE
+  WITHDRAWN
+  VOID
+}
+
+model Reservation {
+  id         String            @id @default(uuid(7)) @db.Uuid
+  eventId    String            @db.Uuid
+  event      Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  attendeeId String
+  attendee   User              @relation(fields: [attendeeId], references: [id])
+  status     ReservationStatus @default(ACTIVE)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  @@unique([eventId, attendeeId]) // blocks double-join; re-joining reactivates this row
+  @@index([attendeeId])
+}
+
+// ─── Moderation ─────────────────────────────────────────────────────
+
+enum ReportReason {
+  INDECENT
+  SPAM
+  WRONG_INFO
+  OTHER
+}
+
+enum ReportStatus {
+  OPEN
+  DISMISSED
+  ACTIONED
+}
+
+model Report {
+  id         String       @id @default(uuid(7)) @db.Uuid
+  eventId    String       @db.Uuid
+  event      Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  reporterId String
+  reporter   User         @relation(fields: [reporterId], references: [id])
+  reason     ReportReason
+  comment    String?
+  status     ReportStatus @default(OPEN) // only OPEN counts toward the auto-hide threshold
+  createdAt  DateTime     @default(now())
+  resolvedAt DateTime?
+
+  @@unique([eventId, reporterId])
+  @@index([eventId, status])
+}
+
+enum UploadStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// Tracks R2 uploads so rejected or never-attached images get cleaned up.
+model Upload {
+  id         String       @id @default(uuid(7)) @db.Uuid
+  storageKey String       @unique
+  uploaderId String
+  uploader   User         @relation(fields: [uploaderId], references: [id])
+  status     UploadStatus @default(PENDING)
+  createdAt  DateTime     @default(now())
+
+  @@index([status, createdAt])
+}
