@@ -113,36 +113,41 @@ export class HostedEventsService {
     const linkProblem = onlineLinkError(place);
     if (linkProblem) throw invalid(linkProblem);
 
-    // shortcut: reads reservedCount without the Event-row lock; #9 moves Capacity changes under it.
-    const capacity =
-      input.capacity !== undefined ? input.capacity : current.capacity;
-    const capacityProblem = capacityError(capacity, current.reservedCount);
-    if (capacityProblem) {
-      throw new AppError('CAPACITY_BELOW_RESERVED', 409, capacityProblem);
-    }
-
     await assertRefsAvailable(
       this.prisma,
       input.categoryId !== current.categoryId ? input.categoryId : undefined,
       place.cityId !== current.cityId ? place.cityId : undefined,
     );
 
-    const event = await this.prisma.event.update({
-      where: { id },
-      data: {
-        // slug is deliberately never changed, so shared links keep working
-        title: input.title,
-        description: input.description,
-        categoryId: input.categoryId,
-        timeZone: input.timeZone,
-        capacity,
-        ...place,
-        startsAt,
-        endsAt,
-      },
-      include: withRefs,
+    const capacity =
+      input.capacity !== undefined ? input.capacity : current.capacity;
+
+    return this.prisma.$transaction(async (tx) => {
+      // Same row lock joins take (ADR-0003): no one can join between this check and the write.
+      const [locked] = await tx.$queryRaw<{ reservedCount: number }[]>`
+        SELECT "reservedCount" FROM "Event" WHERE id = ${id}::uuid FOR UPDATE`;
+      const capacityProblem = capacityError(capacity, locked.reservedCount);
+      if (capacityProblem) {
+        throw new AppError('CAPACITY_BELOW_RESERVED', 409, capacityProblem);
+      }
+
+      const event = await tx.event.update({
+        where: { id },
+        data: {
+          // slug is deliberately never changed, so shared links keep working
+          title: input.title,
+          description: input.description,
+          categoryId: input.categoryId,
+          timeZone: input.timeZone,
+          capacity,
+          ...place,
+          startsAt,
+          endsAt,
+        },
+        include: withRefs,
+      });
+      return toOrganizerView(event);
     });
-    return toOrganizerView(event);
   }
 
   async delete(user: SessionUser, id: string): Promise<void> {
