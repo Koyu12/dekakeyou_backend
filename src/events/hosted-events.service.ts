@@ -64,6 +64,33 @@ export class HostedEventsService {
     });
   }
 
+  /**
+   * Account deletion: cancels the Organizer's live Hosted Events that haven't ended, voiding
+   * their Reservations. Runs in the caller's transaction; locks rows in id order as joins do.
+   * Returns how many were cancelled.
+   */
+  async cancelAllUpcoming(
+    tx: Prisma.TransactionClient,
+    organizerId: string,
+  ): Promise<number> {
+    const live = await tx.$queryRaw<{ id: string }[]>`
+      SELECT id FROM "Event"
+      WHERE "organizerId" = ${organizerId} AND kind = 'HOSTED'
+        AND status IN ('PUBLISHED', 'UNDER_REVIEW') AND "endsAt" > now()
+      ORDER BY id
+      FOR UPDATE`;
+    for (const { id } of live) await this.callOff(tx, id);
+    return live.length;
+  }
+
+  private async callOff(tx: Prisma.TransactionClient, id: string) {
+    await tx.event.update({
+      where: { id },
+      data: { status: 'CANCELLED', cancelledAt: new Date() },
+    });
+    await this.reservations.voidAllForEvent(tx, id);
+  }
+
   /** Calls the Event off: it stays visible as Cancelled and every Active Reservation becomes Void. */
   async cancel(user: SessionUser, id: string): Promise<OrganizerEvent> {
     return this.prisma.$transaction(async (tx) => {
@@ -77,11 +104,7 @@ export class HostedEventsService {
         throw statusError(`A ${locked.status} Event can't be cancelled`);
       }
 
-      await tx.event.update({
-        where: { id },
-        data: { status: 'CANCELLED', cancelledAt: new Date() },
-      });
-      await this.reservations.voidAllForEvent(tx, id);
+      await this.callOff(tx, id);
 
       const event = await tx.event.findUniqueOrThrow({
         where: { id },
