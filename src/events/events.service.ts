@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { CatalogService } from '../catalog/catalog.service';
 import type { Prisma } from '../generated/prisma/client';
 import type { EventStatus } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
@@ -21,6 +22,7 @@ import {
   notFound,
   publicEventWhere,
   statusError,
+  tagsOrThrow,
   toDetail,
   withRefs,
 } from './events.shared';
@@ -28,7 +30,10 @@ import {
 // Public reads, plus the Admin's Listed Events (ADR-0001: no owner, source MANUAL).
 @Injectable()
 export class EventsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly catalog: CatalogService,
+  ) {}
 
   async findPublicBySlug(slug: string): Promise<EventDetail> {
     const event = await this.prisma.event.findFirst({
@@ -61,25 +66,30 @@ export class EventsService {
       endsAt: new Date(input.endsAt),
     };
     assertPlaceAndTime(data);
+    const tags = tagsOrThrow(input.tags) ?? [];
     await assertRefsAvailable(this.prisma, input.categoryId, data.cityId);
 
-    const event = await this.prisma.event.create({
-      data: {
-        slug: makeSlug(input.title),
-        kind: 'LISTED',
-        status: 'DRAFT',
-        source: 'MANUAL',
-        title: input.title,
-        description: input.description ?? '',
-        categoryId: input.categoryId,
-        timeZone: input.timeZone,
-        presenterName: input.presenterName ?? null,
-        officialUrl: input.officialUrl ?? null,
-        ...data,
-      },
-      include: withRefs,
+    return this.prisma.$transaction(async (tx) => {
+      const { id } = await tx.event.create({
+        data: {
+          slug: makeSlug(input.title),
+          kind: 'LISTED',
+          status: 'DRAFT',
+          source: 'MANUAL',
+          title: input.title,
+          description: input.description ?? '',
+          categoryId: input.categoryId,
+          timeZone: input.timeZone,
+          presenterName: input.presenterName ?? null,
+          officialUrl: input.officialUrl ?? null,
+          ...data,
+        },
+      });
+      await this.catalog.setEventTags(tx, id, tags);
+      return toDetail(
+        await tx.event.findUniqueOrThrow({ where: { id }, include: withRefs }),
+      );
     });
-    return toDetail(event);
   }
 
   async updateListed(
@@ -97,6 +107,7 @@ export class EventsService {
       : current.startsAt;
     const endsAt = input.endsAt ? new Date(input.endsAt) : current.endsAt;
     assertPlaceAndTime({ ...place, startsAt, endsAt });
+    const tags = tagsOrThrow(input.tags);
 
     // Only newly chosen references must be active; an Event may keep a since-archived one.
     await assertRefsAvailable(
@@ -105,23 +116,27 @@ export class EventsService {
       place.cityId !== current.cityId ? place.cityId : undefined,
     );
 
-    const event = await this.prisma.event.update({
-      where: { id },
-      data: {
-        // slug is deliberately never changed, so shared links keep working
-        title: input.title,
-        description: input.description,
-        categoryId: input.categoryId,
-        timeZone: input.timeZone,
-        presenterName: input.presenterName,
-        officialUrl: input.officialUrl,
-        ...place,
-        startsAt,
-        endsAt,
-      },
-      include: withRefs,
+    return this.prisma.$transaction(async (tx) => {
+      await tx.event.update({
+        where: { id },
+        data: {
+          // slug is deliberately never changed, so shared links keep working
+          title: input.title,
+          description: input.description,
+          categoryId: input.categoryId,
+          timeZone: input.timeZone,
+          presenterName: input.presenterName,
+          officialUrl: input.officialUrl,
+          ...place,
+          startsAt,
+          endsAt,
+        },
+      });
+      if (tags) await this.catalog.setEventTags(tx, id, tags);
+      return toDetail(
+        await tx.event.findUniqueOrThrow({ where: { id }, include: withRefs }),
+      );
     });
-    return toDetail(event);
   }
 
   async publishListed(id: string): Promise<EventDetail> {

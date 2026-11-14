@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { SessionUser } from '../auth/auth';
+import { CatalogService } from '../catalog/catalog.service';
 import type { EventStatus } from '../generated/prisma/enums';
 import { AppError } from '../common/errors/app-error';
 import { PrismaService } from '../prisma/prisma.service';
@@ -27,6 +28,7 @@ import {
   normalizePlace,
   notFound,
   statusError,
+  tagsOrThrow,
   toOrganizerView,
   withRefs,
 } from './events.shared';
@@ -39,6 +41,7 @@ export class HostedEventsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly reservations: ReservationsService,
+    private readonly catalog: CatalogService,
   ) {}
 
   /** Calls the Event off: it stays visible as Cancelled and every Active Reservation becomes Void. */
@@ -87,6 +90,7 @@ export class HostedEventsService {
     assertPlaceAndTime(data);
     const linkProblem = onlineLinkError(data);
     if (linkProblem) throw invalid(linkProblem);
+    const tags = tagsOrThrow(input.tags) ?? [];
     await assertRefsAvailable(this.prisma, input.categoryId, data.cityId);
 
     return this.prisma.$transaction(async (tx) => {
@@ -108,7 +112,7 @@ export class HostedEventsService {
         );
       }
 
-      const event = await tx.event.create({
+      const { id } = await tx.event.create({
         data: {
           slug: makeSlug(input.title),
           kind: 'HOSTED',
@@ -121,9 +125,11 @@ export class HostedEventsService {
           capacity: input.capacity ?? null,
           ...data,
         },
-        include: withRefs,
       });
-      return toOrganizerView(event);
+      await this.catalog.setEventTags(tx, id, tags);
+      return toOrganizerView(
+        await tx.event.findUniqueOrThrow({ where: { id }, include: withRefs }),
+      );
     });
   }
 
@@ -145,6 +151,7 @@ export class HostedEventsService {
     assertPlaceAndTime({ ...place, startsAt, endsAt });
     const linkProblem = onlineLinkError(place);
     if (linkProblem) throw invalid(linkProblem);
+    const tags = tagsOrThrow(input.tags);
 
     await assertRefsAvailable(
       this.prisma,
@@ -164,7 +171,7 @@ export class HostedEventsService {
         throw new AppError('CAPACITY_BELOW_RESERVED', 409, capacityProblem);
       }
 
-      const event = await tx.event.update({
+      await tx.event.update({
         where: { id },
         data: {
           // slug is deliberately never changed, so shared links keep working
@@ -177,9 +184,11 @@ export class HostedEventsService {
           startsAt,
           endsAt,
         },
-        include: withRefs,
       });
-      return toOrganizerView(event);
+      if (tags) await this.catalog.setEventTags(tx, id, tags);
+      return toOrganizerView(
+        await tx.event.findUniqueOrThrow({ where: { id }, include: withRefs }),
+      );
     });
   }
 

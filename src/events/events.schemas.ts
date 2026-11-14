@@ -23,6 +23,7 @@ const BaseEventFields = z.object({
   startsAt: dateTimeInput,
   endsAt: dateTimeInput,
   timeZone: z.string().refine(isValidTimeZone, 'Unknown IANA time zone'),
+  tags: z.array(z.string().max(60)).max(20).optional(), // normalized + capped at 5 by the catalog rules
 });
 
 const ListedEventFields = BaseEventFields.extend({
@@ -72,6 +73,7 @@ export const EventDetailSchema = z.object({
     .nullable(),
   capacity: z.number().int().nullable(),
   reservedCount: z.number().int(),
+  tags: z.array(z.string()),
   cancelledAt: z.iso.datetime().nullable(),
 });
 export class EventDetailDto extends createZodDto(EventDetailSchema) {}
