@@ -1,25 +1,47 @@
 import { INestApplication, Type } from '@nestjs/common';
-import { App } from 'supertest/types';
 import { Test } from '@nestjs/testing';
+import request from 'supertest';
+import { App } from 'supertest/types';
 import { AppModule } from '../../src/app.module';
 import { configureApp, setupSwagger } from '../../src/app.setup';
+import { Email, EmailSender } from '../../src/notifications/email-sender';
 import { PrismaService } from '../../src/prisma/prisma.service';
 
-export type TestApp = { app: INestApplication<App>; prisma: PrismaService };
+// Captures outgoing email instead of sending it, so tests can read login codes.
+export class CapturingEmailSender extends EmailSender {
+  readonly sent: Email[] = [];
+  send(email: Email) {
+    this.sent.push(email);
+    return Promise.resolve();
+  }
+  lastTo(to: string) {
+    return this.sent.filter((e) => e.to === to).at(-1);
+  }
+}
+
+export type TestApp = {
+  app: INestApplication<App>;
+  prisma: PrismaService;
+  emails: CapturingEmailSender;
+};
 
 // Boots the real app (same setup as main.ts) against the test database.
 export async function createTestApp(
   options: { controllers?: Type[] } = {},
 ): Promise<TestApp> {
+  const emails = new CapturingEmailSender();
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
     controllers: options.controllers ?? [],
-  }).compile();
+  })
+    .overrideProvider(EmailSender)
+    .useValue(emails)
+    .compile();
   const app = moduleRef.createNestApplication<INestApplication<App>>();
   configureApp(app);
   setupSwagger(app);
   await app.init();
-  return { app, prisma: app.get(PrismaService) };
+  return { app, prisma: app.get(PrismaService), emails };
 }
 
 // Empties every table except Prisma's migration history.
@@ -30,4 +52,46 @@ export async function resetDb(prisma: PrismaService) {
   await prisma.$executeRawUnsafe(
     `TRUNCATE ${tables.map((t) => `"${t.tablename}"`).join(', ')} RESTART IDENTITY CASCADE`,
   );
+}
+
+// Better Auth checks the Origin of state-changing requests, like a browser would send.
+export const ORIGIN = process.env.BETTER_AUTH_URL!;
+
+export function requestOtp(t: TestApp, email: string) {
+  return request(t.app.getHttpServer())
+    .post('/api/auth/email-otp/send-verification-otp')
+    .set('Origin', ORIGIN)
+    .send({ email, type: 'sign-in' });
+}
+
+export function signInWithOtp(t: TestApp, email: string, otp: string) {
+  return request(t.app.getHttpServer())
+    .post('/api/auth/sign-in/email-otp')
+    .set('Origin', ORIGIN)
+    .send({ email, otp });
+}
+
+export function otpFromEmail(t: TestApp, email: string) {
+  const otp = t.emails.lastTo(email)?.text.match(/\b(\d{6})\b/)?.[1];
+  if (!otp) throw new Error(`No login code emailed to ${email}`);
+  return otp;
+}
+
+/** Logs in through the real email-OTP flow and returns the session cookie header. */
+export async function login(
+  t: TestApp,
+  email: string,
+  options: { role?: 'admin' } = {},
+) {
+  await requestOtp(t, email).expect(200);
+  const res = await signInWithOtp(t, email, otpFromEmail(t, email)).expect(200);
+  if (options.role) {
+    await t.prisma.user.update({
+      where: { email },
+      data: { role: options.role },
+    });
+  }
+  const cookie = res.headers['set-cookie'] as unknown as string[] | undefined;
+  if (!cookie?.length) throw new Error('Sign-in returned no session cookie');
+  return cookie.map((c) => c.split(';')[0]).join('; ');
 }
