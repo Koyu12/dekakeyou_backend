@@ -113,3 +113,32 @@ export function capacityError(capacity: number | null, reservedCount: number) {
     ? `Capacity can't be lower than the ${reservedCount} places already taken`
     : null;
 }
+
+// ─── Browsing ───────────────────────────────────────────────────────
+
+/** Position in the browse order (startsAt, then id). Opaque to clients. */
+export type BrowseCursor = { startsAt: Date; id: string };
+
+export function encodeCursor(c: BrowseCursor) {
+  return Buffer.from(JSON.stringify([c.startsAt.toISOString(), c.id])).toString(
+    'base64url',
+  );
+}
+
+/** Returns null for anything that isn't a cursor this API produced. */
+export function decodeCursor(raw: string): BrowseCursor | null {
+  try {
+    const parsed: unknown = JSON.parse(
+      Buffer.from(raw, 'base64url').toString('utf8'),
+    );
+    if (!Array.isArray(parsed) || parsed.length !== 2) return null;
+    const [startsAt, id] = parsed as unknown[];
+    if (typeof startsAt !== 'string' || typeof id !== 'string') return null;
+    const date = new Date(startsAt);
+    if (Number.isNaN(date.getTime())) return null;
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+    return { startsAt: date, id };
+  } catch {
+    return null;
+  }
+}
