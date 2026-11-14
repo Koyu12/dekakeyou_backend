@@ -3,6 +3,7 @@ import { createZodDto } from 'nestjs-zod';
 import request from 'supertest';
 import { z } from 'zod';
 import { createOpenApiDocument } from '../src/app.setup';
+import { Public } from '../src/common/auth/auth.decorators';
 import { AppError } from '../src/common/errors/app-error';
 import { createTestApp, resetDb, TestApp } from './support/test-app';
 
@@ -11,6 +12,7 @@ class EchoQuery extends createZodDto(
   z.object({ count: z.coerce.number().int() }),
 ) {}
 
+@Public()
 @Controller('__test')
 class ProbeController {
   @Get('echo')

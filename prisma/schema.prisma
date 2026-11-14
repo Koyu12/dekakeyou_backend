@@ -3,7 +3,7 @@
 generator client {
   provider     = "prisma-client"
   moduleFormat = "cjs"
-  output   = "../src/generated/prisma"
+  output       = "../src/generated/prisma"
 }
 
 datasource db {
@@ -11,7 +11,7 @@ datasource db {
 }
 
 // ─── Better Auth (core + admin plugin) ──────────────────────────────
-// shortcut: hand-written to match Better Auth's Prisma output; re-run `npx @better-auth/cli generate` after installing it and diff.
+// Matches `npx auth generate` (better-auth 1.7.23) minus its @@map lines; re-run and diff after upgrading Better Auth.
 
 model User {
   id            String    @id
@@ -78,6 +78,13 @@ model Verification {
   updatedAt  DateTime @updatedAt
 
   @@index([identifier])
+}
+
+model RateLimit {
+  id          String @id
+  key         String @unique
+  count       Int
+  lastRequest BigInt
 }
 
 // ─── Events ─────────────────────────────────────────────────────────

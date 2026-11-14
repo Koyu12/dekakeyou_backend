@@ -6,6 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import { inspect } from 'node:util';
 import { ZodSerializationException, ZodValidationException } from 'nestjs-zod';
 import { AppError, ErrorBody, ErrorCode } from './app-error';
 
@@ -58,7 +59,8 @@ export class AppExceptionFilter implements ExceptionFilter {
       }
     }
     // Unexpected (including a response that doesn't match its declared schema): log it, never leak details.
-    this.logger.error(exception instanceof Error ? exception.stack : exception);
+    // inspect() also prints errors from other realms (e.g. ESM libraries) whose stack Logger shows blank.
+    this.logger.error(inspect(exception, { depth: 3 }));
     return [500, { code: 'INTERNAL_ERROR', message: 'Internal server error' }];
   }
 }
