@@ -1,3 +1,4 @@
+import { normalizeTags } from '../catalog/catalog.rules';
 import { AppError } from '../common/errors/app-error';
 import type { Prisma, PrismaClient } from '../generated/prisma/client';
 import { placeAndTimeError, PUBLIC_STATUSES } from './events.rules';
@@ -9,6 +10,7 @@ export const withRefs = {
   category: { select: { id: true, name: true } },
   city: { select: { id: true, name: true, province: true } },
   organizer: { select: { id: true, name: true, image: true } },
+  tags: { select: { tag: { select: { name: true } } } },
 } satisfies Prisma.EventInclude;
 
 export type EventWithRefs = Prisma.EventGetPayload<{
@@ -111,6 +113,7 @@ export function toDetail(e: EventWithRefs): EventDetail {
     organizer: e.organizer,
     capacity: e.capacity,
     reservedCount: e.reservedCount,
+    tags: e.tags.map((t) => t.tag.name).sort(),
     cancelledAt: e.cancelledAt?.toISOString() ?? null,
   };
 }
@@ -131,3 +134,11 @@ export const publicEventWhere = {
   status: { in: PUBLIC_STATUSES },
   reviewReason: null,
 } satisfies Prisma.EventWhereInput;
+
+/** Normalized Tags for an input, or undefined when the input doesn't touch Tags. */
+export function tagsOrThrow(raw: string[] | undefined) {
+  if (raw === undefined) return undefined;
+  const result = normalizeTags(raw);
+  if ('error' in result) throw invalid(result.error);
+  return result.tags;
+}
