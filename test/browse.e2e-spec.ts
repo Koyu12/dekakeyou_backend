@@ -88,7 +88,7 @@ describe('Browse Events (e2e)', () => {
 
     expect(titles(res.body)).toEqual(['Running now', 'Sooner', 'Later']);
     expect(res.body.nextCursor).toBeNull();
-    expect(res.headers['cache-control']).toBe('public, max-age=60');
+    expect(res.headers['cache-control']).toBe('public, max-age=0, s-maxage=60');
   });
 
   it('never shows Draft, Under Review, Removed, or still-flagged Cancelled Events; shows Cancelled', async () => {

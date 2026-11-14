@@ -79,7 +79,7 @@ describe('Listed Events (e2e)', () => {
 
     const res = await http().get(`/api/v1/events/${draft.slug}`).expect(200);
     expect(res.body).toMatchObject({ id: draft.id, status: 'PUBLISHED' });
-    expect(res.headers['cache-control']).toBe('public, max-age=60');
+    expect(res.headers['cache-control']).toBe('public, max-age=0, s-maxage=60');
   });
 
   it('editing the title keeps the slug, so old links still work', async () => {

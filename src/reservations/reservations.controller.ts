@@ -1,3 +1,4 @@
+import { NO_STORE } from '../common/http/cache';
 import {
   Controller,
   Delete,
@@ -22,7 +23,7 @@ export class ReservationsController {
 
   /** Join: take a place in a Hosted Event. */
   @Post('events/:eventId/reservation')
-  @Header('Cache-Control', 'no-store')
+  @Header('Cache-Control', NO_STORE)
   @ZodResponse({ status: 201, type: MyReservationDto })
   join(
     @CurrentUser() user: SessionUser,
@@ -33,7 +34,7 @@ export class ReservationsController {
 
   /** Withdraw: give the place back before the Event starts. */
   @Delete('events/:eventId/reservation')
-  @Header('Cache-Control', 'no-store')
+  @Header('Cache-Control', NO_STORE)
   @ZodResponse({ status: 200, type: MyReservationDto })
   withdraw(
     @CurrentUser() user: SessionUser,
@@ -43,7 +44,7 @@ export class ReservationsController {
   }
 
   @Get('me/reservations')
-  @Header('Cache-Control', 'no-store')
+  @Header('Cache-Control', NO_STORE)
   @ZodResponse({ status: 200, type: [MyReservationDto] })
   listMine(@CurrentUser() user: SessionUser) {
     return this.reservations.listMine(user);
@@ -51,7 +52,7 @@ export class ReservationsController {
 
   /** The Organizer's Attendee list: display names and avatars only. */
   @Get('me/events/:eventId/attendees')
-  @Header('Cache-Control', 'no-store')
+  @Header('Cache-Control', NO_STORE)
   @ZodResponse({ status: 200, type: [AttendeeDto] })
   listAttendees(
     @CurrentUser() user: SessionUser,

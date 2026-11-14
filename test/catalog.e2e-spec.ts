@@ -30,7 +30,7 @@ describe('Catalog (e2e)', () => {
       'Gaming',
     ]);
     expect(res.body[0]).toEqual({ id: expect.any(String), name: 'Cosplay' });
-    expect(res.headers['cache-control']).toBe('public, max-age=60');
+    expect(res.headers['cache-control']).toBe('public, max-age=0, s-maxage=60');
   });
 
   it('lists non-archived Cities by name, with province', async () => {

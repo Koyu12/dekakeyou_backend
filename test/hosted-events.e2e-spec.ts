@@ -83,7 +83,9 @@ describe('Hosted Events (e2e)', () => {
       expect(body.onlineUrl).toBe('https://discord.gg/secret-room'); // Organizer sees it
 
       const pub = await http().get(`/api/v1/events/${body.slug}`).expect(200);
-      expect(pub.headers['cache-control']).toBe('public, max-age=60');
+      expect(pub.headers['cache-control']).toBe(
+        'public, max-age=0, s-maxage=60',
+      );
       expect(pub.body).not.toHaveProperty('onlineUrl');
       expect(JSON.stringify(pub.body)).not.toContain('secret-room');
     });

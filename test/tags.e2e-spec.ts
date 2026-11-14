@@ -141,7 +141,9 @@ describe('Tags (e2e)', () => {
     it('returns existing Tags by prefix, most used first, publicly and cacheable', async () => {
       const res = await http().get('/api/v1/tags?prefix=gen').expect(200);
       expect(res.body).toEqual({ tags: ['genshin-impact', 'genshin-fanart'] });
-      expect(res.headers['cache-control']).toBe('public, max-age=60');
+      expect(res.headers['cache-control']).toBe(
+        'public, max-age=0, s-maxage=60',
+      );
     });
 
     it('normalizes the prefix the same way as Tags', async () => {
