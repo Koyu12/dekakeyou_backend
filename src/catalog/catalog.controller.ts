@@ -1,3 +1,4 @@
+import { PUBLIC_CACHE } from '../common/http/cache';
 import { Controller, Get, Header, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ZodResponse } from 'nestjs-zod';
@@ -10,8 +11,6 @@ import {
   TagSuggestQuery,
 } from './catalog.schemas';
 import { CatalogService } from './catalog.service';
-
-const PUBLIC_CACHE = 'public, max-age=60';
 
 @ApiTags('catalog')
 @Public()

@@ -1,3 +1,4 @@
+import { NO_STORE } from '../common/http/cache';
 import {
   Body,
   Controller,
@@ -26,14 +27,14 @@ export class AdminListedEventsController {
   constructor(private readonly events: EventsService) {}
 
   @Get()
-  @Header('Cache-Control', 'no-store')
+  @Header('Cache-Control', NO_STORE)
   @ZodResponse({ status: 200, type: [EventDetailDto] })
   list() {
     return this.events.listListedForAdmin();
   }
 
   @Get(':id')
-  @Header('Cache-Control', 'no-store')
+  @Header('Cache-Control', NO_STORE)
   @ZodResponse({ status: 200, type: EventDetailDto })
   get(@Param('id', ParseUUIDPipe) id: string) {
     return this.events.getListedForAdmin(id);

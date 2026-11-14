@@ -1,5 +1,9 @@
 import { normalizeTags } from '../catalog/catalog.rules';
 import { AppError } from '../common/errors/app-error';
+import type {
+  CheckableText,
+  ContentCheckService,
+} from '../content-check/content-check.service';
 import type { Prisma, PrismaClient } from '../generated/prisma/client';
 import { placeAndTimeError, PUBLIC_STATUSES } from './events.rules';
 import type { EventCard, EventDetail, OrganizerEvent } from './events.schemas';
@@ -147,4 +151,20 @@ export function toCard(e: EventWithRefs): EventCard {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { description, ...card } = toDetail(e);
   return card;
+}
+
+/**
+ * Runs the automatic content check on an Event's text. A clear fail is rejected before anything
+ * is saved; otherwise returns whether the Event may be public (PASS) or must wait (BORDERLINE).
+ */
+export async function checkContent(
+  contentCheck: ContentCheckService,
+  content: CheckableText,
+  options: { ai: boolean },
+): Promise<'PASS' | 'BORDERLINE'> {
+  const verdict = await contentCheck.checkText(content, options);
+  if (verdict.result === 'FAIL') {
+    throw new AppError('CONTENT_REJECTED', 422, verdict.reason);
+  }
+  return verdict.result;
 }

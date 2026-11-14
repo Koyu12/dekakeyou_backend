@@ -1,3 +1,4 @@
+import { PUBLIC_CACHE } from '../common/http/cache';
 import { Controller, Get, Header, Param, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ZodResponse } from 'nestjs-zod';
@@ -8,9 +9,6 @@ import {
   EventPageDto,
 } from './events.schemas';
 import { EventsService } from './events.service';
-
-// Public and identical for everyone, so it's cacheable at the edge. Never contains online links.
-const PUBLIC_CACHE = 'public, max-age=60';
 
 @ApiTags('events')
 @Public()

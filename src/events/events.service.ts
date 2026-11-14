@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { CatalogService } from '../catalog/catalog.service';
+import { ContentCheckService } from '../content-check/content-check.service';
 import type { Prisma } from '../generated/prisma/client';
 import type { EventStatus } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
@@ -22,6 +23,7 @@ import type {
 import {
   assertPlaceAndTime,
   assertRefsAvailable,
+  checkContent,
   invalid,
   mergePlace,
   normalizePlace,
@@ -40,6 +42,7 @@ export class EventsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly catalog: CatalogService,
+    private readonly contentCheck: ContentCheckService,
   ) {}
 
   async findPublicBySlug(slug: string): Promise<EventDetail> {
@@ -121,6 +124,12 @@ export class EventsService {
     assertPlaceAndTime(data);
     const tags = tagsOrThrow(input.tags) ?? [];
     await assertRefsAvailable(this.prisma, input.categoryId, data.cityId);
+    // The Admin's own posts skip the AI call but still go through the banned-word list.
+    await checkContent(
+      this.contentCheck,
+      { title: input.title, description: input.description ?? '', tags },
+      { ai: false },
+    );
 
     return this.prisma.$transaction(async (tx) => {
       const { id } = await tx.event.create({
@@ -167,6 +176,15 @@ export class EventsService {
       this.prisma,
       input.categoryId !== current.categoryId ? input.categoryId : undefined,
       place.cityId !== current.cityId ? place.cityId : undefined,
+    );
+    await checkContent(
+      this.contentCheck,
+      {
+        title: input.title ?? current.title,
+        description: input.description ?? current.description,
+        tags: tags ?? current.tags.map((t) => t.tag.name),
+      },
+      { ai: false },
     );
 
     return this.prisma.$transaction(async (tx) => {

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { SessionUser } from '../auth/auth';
 import { CatalogService } from '../catalog/catalog.service';
+import { ContentCheckService } from '../content-check/content-check.service';
 import type { EventStatus } from '../generated/prisma/enums';
 import { AppError } from '../common/errors/app-error';
 import { PrismaService } from '../prisma/prisma.service';
@@ -23,6 +24,7 @@ import type {
 import {
   assertPlaceAndTime,
   assertRefsAvailable,
+  checkContent,
   invalid,
   mergePlace,
   normalizePlace,
@@ -42,6 +44,7 @@ export class HostedEventsService {
     private readonly prisma: PrismaService,
     private readonly reservations: ReservationsService,
     private readonly catalog: CatalogService,
+    private readonly contentCheck: ContentCheckService,
   ) {}
 
   /** Calls the Event off: it stays visible as Cancelled and every Active Reservation becomes Void. */
@@ -92,6 +95,11 @@ export class HostedEventsService {
     if (linkProblem) throw invalid(linkProblem);
     const tags = tagsOrThrow(input.tags) ?? [];
     await assertRefsAvailable(this.prisma, input.categoryId, data.cityId);
+    const verdict = await checkContent(
+      this.contentCheck,
+      { title: input.title, description: input.description ?? '', tags },
+      { ai: true },
+    );
 
     return this.prisma.$transaction(async (tx) => {
       // One user's creates run one at a time, so parallel requests can't slip past the daily limit.
@@ -116,7 +124,9 @@ export class HostedEventsService {
         data: {
           slug: makeSlug(input.title),
           kind: 'HOSTED',
-          status: 'PUBLISHED', // the automatic content check (#11) will slot in before this
+          ...(verdict === 'BORDERLINE'
+            ? { status: 'UNDER_REVIEW', reviewReason: 'AUTO_CHECK' }
+            : { status: 'PUBLISHED' }),
           organizerId: user.id,
           title: input.title,
           description: input.description ?? '',
@@ -162,18 +172,42 @@ export class HostedEventsService {
     const capacity =
       input.capacity !== undefined ? input.capacity : current.capacity;
 
+    // Checked on every text edit: publishing something clean and then editing it must not slip by.
+    const touchesText =
+      input.title !== undefined ||
+      input.description !== undefined ||
+      tags !== undefined;
+    const verdict = touchesText
+      ? await checkContent(
+          this.contentCheck,
+          {
+            title: input.title ?? current.title,
+            description: input.description ?? current.description,
+            tags: tags ?? current.tags.map((t) => t.tag.name),
+          },
+          { ai: true },
+        )
+      : 'PASS';
+
     return this.prisma.$transaction(async (tx) => {
       // Same row lock joins take (ADR-0003): no one can join between this check and the write.
-      const [locked] = await tx.$queryRaw<{ reservedCount: number }[]>`
-        SELECT "reservedCount" FROM "Event" WHERE id = ${id}::uuid FOR UPDATE`;
+      const [locked] = await tx.$queryRaw<
+        { reservedCount: number; status: EventStatus }[]
+      >`
+        SELECT "reservedCount", status FROM "Event" WHERE id = ${id}::uuid FOR UPDATE`;
       const capacityProblem = capacityError(capacity, locked.reservedCount);
       if (capacityProblem) {
         throw new AppError('CAPACITY_BELOW_RESERVED', 409, capacityProblem);
       }
+      // A borderline edit hides a public Event; a clean edit never lifts an existing review.
+      const hold = verdict === 'BORDERLINE' && locked.status === 'PUBLISHED';
 
       await tx.event.update({
         where: { id },
         data: {
+          ...(hold
+            ? { status: 'UNDER_REVIEW', reviewReason: 'AUTO_CHECK' }
+            : {}),
           // slug is deliberately never changed, so shared links keep working
           title: input.title,
           description: input.description,

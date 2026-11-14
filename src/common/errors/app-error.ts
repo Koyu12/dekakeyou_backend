@@ -14,6 +14,7 @@ export type ErrorCode =
   | 'CATEGORY_NOT_AVAILABLE'
   | 'CITY_NOT_AVAILABLE'
   | 'CAPACITY_BELOW_RESERVED'
+  | 'CONTENT_REJECTED'
   // Reservations
   | 'EVENT_NOT_JOINABLE'
   | 'JOIN_CLOSED'

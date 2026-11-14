@@ -1,3 +1,4 @@
+import { NO_STORE } from '../common/http/cache';
 import {
   Body,
   Controller,
@@ -28,14 +29,14 @@ export class HostedEventsController {
   constructor(private readonly hosted: HostedEventsService) {}
 
   @Post('events')
-  @Header('Cache-Control', 'no-store')
+  @Header('Cache-Control', NO_STORE)
   @ZodResponse({ status: 201, type: OrganizerEventDto })
   create(@CurrentUser() user: SessionUser, @Body() body: CreateHostedEventDto) {
     return this.hosted.create(user, body);
   }
 
   @Patch('events/:id')
-  @Header('Cache-Control', 'no-store')
+  @Header('Cache-Control', NO_STORE)
   @ZodResponse({ status: 200, type: OrganizerEventDto })
   update(
     @CurrentUser() user: SessionUser,
@@ -48,7 +49,7 @@ export class HostedEventsController {
   /** Calls the Event off: it stays visible as Cancelled and its Reservations become Void. */
   @Post('events/:id/cancel')
   @HttpCode(200)
-  @Header('Cache-Control', 'no-store')
+  @Header('Cache-Control', NO_STORE)
   @ZodResponse({ status: 200, type: OrganizerEventDto })
   cancel(
     @CurrentUser() user: SessionUser,
@@ -68,14 +69,14 @@ export class HostedEventsController {
   }
 
   @Get('me/events')
-  @Header('Cache-Control', 'no-store')
+  @Header('Cache-Control', NO_STORE)
   @ZodResponse({ status: 200, type: [OrganizerEventDto] })
   listMine(@CurrentUser() user: SessionUser) {
     return this.hosted.listOwn(user);
   }
 
   @Get('me/events/:id')
-  @Header('Cache-Control', 'no-store')
+  @Header('Cache-Control', NO_STORE)
   @ZodResponse({ status: 200, type: OrganizerEventDto })
   getMine(
     @CurrentUser() user: SessionUser,

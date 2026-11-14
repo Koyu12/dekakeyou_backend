@@ -1,3 +1,4 @@
+import { NO_STORE } from '../common/http/cache';
 import { Controller, Get, Header } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { createZodDto, ZodResponse } from 'nestjs-zod';
@@ -18,7 +19,7 @@ class MeDto extends createZodDto(MeSchema) {}
 @Controller('me')
 export class MeController {
   @Get()
-  @Header('Cache-Control', 'no-store')
+  @Header('Cache-Control', NO_STORE)
   @ZodResponse({ status: 200, type: MeDto })
   me(@CurrentUser() user: SessionUser) {
     return {
