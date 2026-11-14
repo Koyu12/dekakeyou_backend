@@ -17,7 +17,7 @@ npm run start:dev             # http://localhost:4000/api/v1, docs at http://loc
 
 Better Auth serves `/api/auth/*` (email OTP, Google, sign-out, update-user). Every `/api/v1` endpoint requires login unless it is marked `@Public()`, and `@Roles('admin')` restricts it to admins.
 
-- **Email codes in development:** no email provider is configured yet, so login codes are printed in the server log (`[Email] to=… subject="Your Dekakeyou login code"`).
+- **Email:** with `SMTP_HOST` empty, emails and login codes are printed in the server log (`[Email] to=… subject="Your Dekakeyou login code"`). Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM` (plus `SMTP_USER`/`SMTP_PASSWORD` if the server needs them, and `SMTP_SECURE`) to send real email through any SMTP provider; a partial setting stops the app at startup. To read real SMTP mail locally, run `docker compose --profile mail up -d mailpit`, set `SMTP_HOST=localhost` and `SMTP_PORT=1025`, and open http://localhost:8025.
 - **Google:** enabled only when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set.
 - **Making someone the Admin:** log in once with that email, then:
 
