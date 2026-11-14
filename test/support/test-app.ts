@@ -4,6 +4,8 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../../src/app.module';
 import { configureApp, setupSwagger } from '../../src/app.setup';
+import type { Verdict } from '../../src/content-check/content-check.rules';
+import { TextModerator } from '../../src/content-check/text-moderator';
 import { Email, EmailSender } from '../../src/notifications/email-sender';
 import { PrismaService } from '../../src/prisma/prisma.service';
 
@@ -19,10 +21,21 @@ export class CapturingEmailSender extends EmailSender {
   }
 }
 
+// Stands in for the AI moderation API; tests set the next verdict (default: pass).
+export class FakeTextModerator extends TextModerator {
+  verdict: Verdict = { result: 'PASS' };
+  readonly checked: string[] = [];
+  check(text: string) {
+    this.checked.push(text);
+    return Promise.resolve(this.verdict);
+  }
+}
+
 export type TestApp = {
   app: INestApplication<App>;
   prisma: PrismaService;
   emails: CapturingEmailSender;
+  moderator: FakeTextModerator;
 };
 
 // Boots the real app (same setup as main.ts) against the test database.
@@ -30,18 +43,21 @@ export async function createTestApp(
   options: { controllers?: Type[] } = {},
 ): Promise<TestApp> {
   const emails = new CapturingEmailSender();
+  const moderator = new FakeTextModerator();
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
     controllers: options.controllers ?? [],
   })
     .overrideProvider(EmailSender)
     .useValue(emails)
+    .overrideProvider(TextModerator)
+    .useValue(moderator)
     .compile();
   const app = moduleRef.createNestApplication<INestApplication<App>>();
   configureApp(app);
   setupSwagger(app);
   await app.init();
-  return { app, prisma: app.get(PrismaService), emails };
+  return { app, prisma: app.get(PrismaService), emails, moderator };
 }
 
 // Empties every table except Prisma's migration history.

@@ -3,6 +3,7 @@ import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { ZodSerializerInterceptor, ZodValidationPipe } from 'nestjs-zod';
 import { AuthModule } from './auth/auth.module';
 import { CatalogModule } from './catalog/catalog.module';
+import { ContentCheckModule } from './content-check/content-check.module';
 import { EventsModule } from './events/events.module';
 import { AppExceptionFilter } from './common/errors/app-exception.filter';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -14,6 +15,7 @@ import { ReservationsModule } from './reservations/reservations.module';
     PrismaModule,
     NotificationsModule,
     AuthModule,
+    ContentCheckModule,
     CatalogModule,
     EventsModule,
     ReservationsModule,
