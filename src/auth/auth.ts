@@ -6,6 +6,24 @@ import type { EmailSender } from '../notifications/email-sender';
 
 export const AUTH = Symbol('AUTH');
 
+export const ADMIN_PLUGIN_PATHS = [
+  '/admin/ban-user',
+  '/admin/unban-user',
+  '/admin/create-user',
+  '/admin/get-user',
+  '/admin/update-user',
+  '/admin/remove-user',
+  '/admin/list-users',
+  '/admin/set-role',
+  '/admin/set-user-password',
+  '/admin/has-permission',
+  '/admin/impersonate-user',
+  '/admin/stop-impersonating',
+  '/admin/list-user-sessions',
+  '/admin/revoke-user-session',
+  '/admin/revoke-user-sessions',
+];
+
 export function createAuth(prisma: PrismaClient, emailSender: EmailSender) {
   const { BETTER_AUTH_URL, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET } =
     process.env;
@@ -27,6 +45,10 @@ export function createAuth(prisma: PrismaClient, emailSender: EmailSender) {
           }
         : undefined,
     rateLimit: { storage: 'database' },
+    // The admin plugin is only used for its role/ban fields and for blocking banned logins.
+    // Its HTTP endpoints would bypass our own flows (a ban must also remove Events and free
+    // places; users are anonymized, never hard-deleted), so all of them are switched off.
+    disabledPaths: ADMIN_PLUGIN_PATHS,
     plugins: [
       emailOTP({
         sendVerificationOTP: ({ email, otp }) =>
