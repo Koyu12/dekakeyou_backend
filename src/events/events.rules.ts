@@ -93,6 +93,30 @@ export function canCancelHosted(status: EventStatus) {
   return status === 'PUBLISHED' || status === 'UNDER_REVIEW';
 }
 
+// ─── Admin moderation ───────────────────────────────────────────────
+
+/**
+ * The status an Event returns to when the Admin restores it, or null if there's nothing to
+ * restore. An Event cancelled while Under Review stays Cancelled; only its review flag clears.
+ */
+export function restoredStatus(
+  status: EventStatus,
+  reviewReason: string | null,
+): EventStatus | null {
+  if (status === 'UNDER_REVIEW') return 'PUBLISHED';
+  if (status === 'CANCELLED' && reviewReason !== null) return 'CANCELLED';
+  return null;
+}
+
+/** The Admin can take down anything people can see or that is waiting for review. */
+export function canRemove(status: EventStatus) {
+  return (
+    status === 'PUBLISHED' ||
+    status === 'UNDER_REVIEW' ||
+    status === 'CANCELLED'
+  );
+}
+
 /**
  * A real delete is for mistakes nobody has acted on yet. Cancelled Events stay visible to their
  * Attendees, and Events Under Review or Removed are kept as moderation evidence.

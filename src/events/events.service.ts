@@ -4,11 +4,14 @@ import { ContentCheckService } from '../content-check/content-check.service';
 import type { Prisma } from '../generated/prisma/client';
 import type { EventStatus } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
+import { ReservationsService } from '../reservations/reservations.service';
 import { normalizeTag } from '../catalog/catalog.rules';
 import {
   canCancelListed,
   canEditListed,
   canPublishListed,
+  canRemove,
+  restoredStatus,
   decodeCursor,
   encodeCursor,
   makeSlug,
@@ -43,7 +46,55 @@ export class EventsService {
     private readonly prisma: PrismaService,
     private readonly catalog: CatalogService,
     private readonly contentCheck: ContentCheckService,
+    private readonly reservations: ReservationsService,
   ) {}
+
+  // ─── Admin moderation (called by moderation inside its transaction; events owns status) ───
+
+  /**
+   * Locks the Event row for a moderation decision and returns what the decision depends on.
+   * The same lock joins and Reports take (ADR-0003).
+   */
+  async lockForModeration(tx: Prisma.TransactionClient, id: string) {
+    const [event] = await tx.$queryRaw<
+      { status: EventStatus; reviewReason: string | null }[]
+    >`SELECT status, "reviewReason" FROM "Event" WHERE id = ${id}::uuid FOR UPDATE`;
+    if (!event) throw notFound();
+    return event;
+  }
+
+  /** Lifts a review: Under Review → Published, and the review flag clears (so it's public again). */
+  async restoreFromReview(tx: Prisma.TransactionClient, id: string) {
+    const event = await this.lockForModeration(tx, id);
+    const status = restoredStatus(event.status, event.reviewReason);
+    if (!status) {
+      throw statusError(`A ${event.status} Event has nothing to restore`);
+    }
+    await tx.event.update({
+      where: { id },
+      data: { status, reviewReason: null },
+    });
+  }
+
+  /**
+   * Takes an Event down for breaking the rules: hidden for good but kept as evidence, and
+   * every Active Reservation becomes Void. Returns the affected Attendees (for emails in #17).
+   */
+  async remove(
+    tx: Prisma.TransactionClient,
+    id: string,
+    reason: string,
+  ): Promise<string[]> {
+    const event = await this.lockForModeration(tx, id);
+    if (!canRemove(event.status)) {
+      throw statusError(`A ${event.status} Event can't be removed`);
+    }
+    await tx.event.update({
+      where: { id },
+      data: { status: 'REMOVED', removedReason: reason, removedAt: new Date() },
+    });
+    return this.reservations.voidAllForEvent(tx, id);
+  }
 
   async findPublicBySlug(slug: string): Promise<EventDetail> {
     const event = await this.prisma.event.findFirst({
