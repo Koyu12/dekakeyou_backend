@@ -1,17 +1,18 @@
 import {
   coverImageUrl,
-  R2Storage,
+  S3Storage,
   storageFromEnv,
   UnconfiguredStorage,
 } from './object-storage';
 
 describe('storageFromEnv', () => {
   const full = {
-    R2_ACCOUNT_ID: 'acc',
-    R2_ACCESS_KEY_ID: 'key',
-    R2_SECRET_ACCESS_KEY: 'secret',
-    R2_BUCKET: 'covers',
-    R2_PUBLIC_URL: 'https://img.example.com',
+    STORAGE_ENDPOINT: 'https://ref.storage.supabase.co/storage/v1/s3',
+    STORAGE_REGION: 'ap-southeast-1',
+    STORAGE_ACCESS_KEY_ID: 'key',
+    STORAGE_SECRET_ACCESS_KEY: 'secret',
+    STORAGE_BUCKET: 'covers',
+    STORAGE_PUBLIC_URL: 'https://img.example.com',
   };
 
   it('nothing set → uploads unavailable (the app still runs)', async () => {
@@ -22,19 +23,19 @@ describe('storageFromEnv', () => {
     ).rejects.toMatchObject({ code: 'UPLOADS_UNAVAILABLE', status: 503 });
   });
 
-  it('all set → R2; partly set → a clear error at startup', () => {
-    expect(storageFromEnv(full)).toBeInstanceOf(R2Storage);
-    expect(() => storageFromEnv({ ...full, R2_BUCKET: '' })).toThrow(
-      /also set R2_BUCKET/,
+  it('all set → S3 storage; partly set → a clear error at startup', () => {
+    expect(storageFromEnv(full)).toBeInstanceOf(S3Storage);
+    expect(() => storageFromEnv({ ...full, STORAGE_BUCKET: '' })).toThrow(
+      /also set STORAGE_BUCKET/,
     );
   });
 
-  it('builds public URLs from R2_PUBLIC_URL', () => {
-    process.env.R2_PUBLIC_URL = 'https://img.example.com/';
+  it('builds public URLs from STORAGE_PUBLIC_URL', () => {
+    process.env.STORAGE_PUBLIC_URL = 'https://img.example.com/';
     expect(coverImageUrl('covers/a.png')).toBe(
       'https://img.example.com/covers/a.png',
     );
     expect(coverImageUrl(null)).toBeNull();
-    delete process.env.R2_PUBLIC_URL;
+    delete process.env.STORAGE_PUBLIC_URL;
   });
 });

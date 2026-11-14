@@ -133,7 +133,7 @@ model Event {
   startsAt      DateTime @db.Timestamptz(3)
   endsAt        DateTime @db.Timestamptz(3)
   timeZone      String // IANA, e.g. "Asia/Jakarta"
-  coverImageKey String? // R2 object key, never the file itself
+  coverImageKey String? // storage object key, never the file itself
 
   // Hosted only
   organizerId   String?
@@ -263,7 +263,7 @@ enum UploadStatus {
   REJECTED
 }
 
-// Tracks R2 uploads so rejected or never-attached images get cleaned up.
+// Tracks uploads so rejected or never-attached images get cleaned up.
 model Upload {
   id             String       @id @default(uuid(7)) @db.Uuid
   storageKey     String       @unique

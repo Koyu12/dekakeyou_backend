@@ -52,7 +52,7 @@ export class FakeImageModerator extends ImageModerator {
   }
 }
 
-// Stands in for R2. `put` plays the browser uploading to the signed URL.
+// Stands in for the S3 store. `put` plays the browser uploading to the signed URL.
 export class InMemoryStorage extends ObjectStorage {
   readonly objects = new Map<string, Uint8Array>();
   readonly signed = new Map<string, { contentType: string; size: number }>();
@@ -60,7 +60,7 @@ export class InMemoryStorage extends ObjectStorage {
     this.signed.set(key, { contentType, size });
     return Promise.resolve(`https://r2.test/${key}?X-Amz-Signature=fake`);
   }
-  /** Uploads to a signed URL; like R2, refuses a size other than the signed one. */
+  /** Uploads to a signed URL; like S3, refuses a size other than the signed one. */
   put(uploadUrl: string, bytes: Uint8Array) {
     const key = new URL(uploadUrl).pathname.slice(1);
     const signed = this.signed.get(key);
