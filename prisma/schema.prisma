@@ -1,7 +1,8 @@
 // Domain terms: see GLOSSARY.md. Connection URL lives in prisma.config.ts (Prisma 7).
 
 generator client {
-  provider = "prisma-client"
+  provider     = "prisma-client"
+  moduleFormat = "cjs"
   output   = "../src/generated/prisma"
 }
 
@@ -159,12 +160,8 @@ model Event {
   @@index([sourceUrl])
 }
 
-// Prisma can't express CHECK constraints; add these to the first migration's SQL by hand:
-//   ALTER TABLE "Event" ADD CONSTRAINT event_hosted_has_organizer CHECK ((kind = 'HOSTED') = ("organizerId" IS NOT NULL));
-//   ALTER TABLE "Event" ADD CONSTRAINT event_offline_has_city      CHECK ("isOnline" OR "cityId" IS NOT NULL);
-//   ALTER TABLE "Event" ADD CONSTRAINT event_ends_after_start      CHECK ("endsAt" > "startsAt");
-//   ALTER TABLE "Event" ADD CONSTRAINT event_capacity_respected    CHECK (capacity IS NULL OR "reservedCount" <= capacity);
-//   ALTER TABLE "Event" ADD CONSTRAINT event_reserved_non_negative CHECK ("reservedCount" >= 0);
+// Prisma can't express CHECK constraints. They live as hand-written SQL at the end of the init migration:
+// Hosted <=> has organizer, offline <=> has city, endsAt > startsAt, reservedCount within 0..capacity.
 
 model Category {
   id         String    @id @default(uuid(7)) @db.Uuid
