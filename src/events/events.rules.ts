@@ -33,7 +33,10 @@ export function isValidTimeZone(timeZone: string) {
   }
 }
 
-/** Statuses the public may see. Drafts, Under Review and Removed Events are hidden. */
+/**
+ * Statuses the public may see. Drafts, Under Review and Removed Events are hidden, and so is any
+ * Event still flagged for review: cancelling an Under Review Event must not make it public again.
+ */
 export const PUBLIC_STATUSES: EventStatus[] = ['PUBLISHED', 'CANCELLED'];
 
 export function canPublishListed(status: EventStatus) {
@@ -83,6 +86,10 @@ export function onlineLinkError(event: {
 }
 
 export function canEditHosted(status: EventStatus) {
+  return status === 'PUBLISHED' || status === 'UNDER_REVIEW';
+}
+
+export function canCancelHosted(status: EventStatus) {
   return status === 'PUBLISHED' || status === 'UNDER_REVIEW';
 }
 

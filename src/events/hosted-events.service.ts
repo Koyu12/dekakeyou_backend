@@ -1,8 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import type { SessionUser } from '../auth/auth';
+import type { EventStatus } from '../generated/prisma/enums';
 import { AppError } from '../common/errors/app-error';
 import { PrismaService } from '../prisma/prisma.service';
+import { ReservationsService } from '../reservations/reservations.service';
 import {
+  canCancelHosted,
   canCreateHosted,
   canEditHosted,
   capacityError,
@@ -33,7 +36,37 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // Organizers' own Hosted Events. Any verified user becomes an Organizer by creating one.
 @Injectable()
 export class HostedEventsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly reservations: ReservationsService,
+  ) {}
+
+  /** Calls the Event off: it stays visible as Cancelled and every Active Reservation becomes Void. */
+  async cancel(user: SessionUser, id: string): Promise<OrganizerEvent> {
+    return this.prisma.$transaction(async (tx) => {
+      // The lock joins take (ADR-0003): nobody can join while the Event is being called off.
+      const [locked] = await tx.$queryRaw<{ status: EventStatus }[]>`
+        SELECT status FROM "Event"
+        WHERE id = ${id}::uuid AND kind = 'HOSTED' AND "organizerId" = ${user.id}
+        FOR UPDATE`;
+      if (!locked) throw notFound();
+      if (!canCancelHosted(locked.status)) {
+        throw statusError(`A ${locked.status} Event can't be cancelled`);
+      }
+
+      await tx.event.update({
+        where: { id },
+        data: { status: 'CANCELLED', cancelledAt: new Date() },
+      });
+      await this.reservations.voidAllForEvent(tx, id);
+
+      const event = await tx.event.findUniqueOrThrow({
+        where: { id },
+        include: withRefs,
+      });
+      return toOrganizerView(event);
+    });
+  }
 
   async create(
     user: SessionUser,

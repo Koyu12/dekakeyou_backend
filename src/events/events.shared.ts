@@ -1,6 +1,6 @@
 import { AppError } from '../common/errors/app-error';
 import type { Prisma, PrismaClient } from '../generated/prisma/client';
-import { placeAndTimeError } from './events.rules';
+import { placeAndTimeError, PUBLIC_STATUSES } from './events.rules';
 import type { EventDetail, OrganizerEvent } from './events.schemas';
 
 // Shared by the Listed and Hosted Event services.
@@ -125,3 +125,9 @@ export const statusError = (message: string) =>
   new AppError('INVALID_STATUS_CHANGE', 409, message);
 export const invalid = (message: string) =>
   new AppError('VALIDATION_FAILED', 400, message);
+
+/** What the public may see (see PUBLIC_STATUSES). Restoring an Event must clear reviewReason. */
+export const publicEventWhere = {
+  status: { in: PUBLIC_STATUSES },
+  reviewReason: null,
+} satisfies Prisma.EventWhereInput;

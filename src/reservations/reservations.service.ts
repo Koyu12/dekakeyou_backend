@@ -31,6 +31,27 @@ const TX_OPTIONS = { maxWait: 10_000, timeout: 15_000 };
 export class ReservationsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * Voids every Active Reservation of an Event whose Event was called off (cancelled or removed).
+   * Runs inside the caller's transaction, which must already hold the Event-row lock.
+   * Returns the affected Attendees, e.g. to notify them.
+   */
+  async voidAllForEvent(tx: Tx, eventId: string): Promise<string[]> {
+    const active = await tx.reservation.findMany({
+      where: { eventId, status: 'ACTIVE' },
+      select: { attendeeId: true },
+    });
+    await tx.reservation.updateMany({
+      where: { eventId, status: 'ACTIVE' },
+      data: { status: 'VOID' },
+    });
+    await tx.event.update({
+      where: { id: eventId },
+      data: { reservedCount: 0 },
+    });
+    return active.map((r) => r.attendeeId);
+  }
+
   join(user: SessionUser, eventId: string): Promise<MyReservation> {
     return this.prisma.$transaction(async (tx) => {
       const event = await lockEvent(tx, eventId);
