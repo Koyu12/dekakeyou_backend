@@ -9,6 +9,7 @@ import { detailsChanged, eventDetails } from '../notifications/notices';
 import { Notifier } from '../notifications/notifier';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReservationsService } from '../reservations/reservations.service';
+import { UploadsService } from '../uploads/uploads.service';
 import {
   canCancelHosted,
   canCreateHosted,
@@ -49,6 +50,7 @@ export class HostedEventsService {
     private readonly catalog: CatalogService,
     private readonly contentCheck: ContentCheckService,
     private readonly notifier: Notifier,
+    private readonly uploads: UploadsService,
   ) {}
 
   /**
@@ -171,11 +173,15 @@ export class HostedEventsService {
         );
       }
 
+      const cover = input.coverUploadId
+        ? await this.uploads.claimCover(tx, user.id, input.coverUploadId)
+        : null;
       const { id } = await tx.event.create({
         data: {
           slug: makeSlug(input.title),
           kind: 'HOSTED',
-          ...(verdict === 'BORDERLINE'
+          coverImageKey: cover?.key ?? null,
+          ...(verdict === 'BORDERLINE' || cover?.needsReview
             ? { status: 'UNDER_REVIEW', reviewReason: 'AUTO_CHECK' }
             : { status: 'PUBLISHED' }),
           organizerId: user.id,
@@ -250,8 +256,13 @@ export class HostedEventsService {
       if (capacityProblem) {
         throw new AppError('CAPACITY_BELOW_RESERVED', 409, capacityProblem);
       }
+      const cover = input.coverUploadId
+        ? await this.uploads.claimCover(tx, user.id, input.coverUploadId, id)
+        : null;
       // A borderline edit hides a public Event; a clean edit never lifts an existing review.
-      const hold = verdict === 'BORDERLINE' && locked.status === 'PUBLISHED';
+      const hold =
+        (verdict === 'BORDERLINE' || !!cover?.needsReview) &&
+        locked.status === 'PUBLISHED';
 
       await tx.event.update({
         where: { id },
@@ -268,6 +279,9 @@ export class HostedEventsService {
           ...place,
           startsAt,
           endsAt,
+          ...(input.coverUploadId !== undefined
+            ? { coverImageKey: cover?.key ?? null }
+            : {}),
         },
       });
       if (tags) await this.catalog.setEventTags(tx, id, tags);

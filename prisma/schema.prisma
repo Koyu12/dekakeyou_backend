@@ -265,12 +265,14 @@ enum UploadStatus {
 
 // Tracks R2 uploads so rejected or never-attached images get cleaned up.
 model Upload {
-  id         String       @id @default(uuid(7)) @db.Uuid
-  storageKey String       @unique
-  uploaderId String
-  uploader   User         @relation(fields: [uploaderId], references: [id])
-  status     UploadStatus @default(PENDING)
-  createdAt  DateTime     @default(now())
+  id             String       @id @default(uuid(7)) @db.Uuid
+  storageKey     String       @unique
+  uploaderId     String
+  uploader       User         @relation(fields: [uploaderId], references: [id])
+  status         UploadStatus @default(PENDING)
+  rejectedReason String? // why the image check refused it
+  needsReview    Boolean      @default(false) // borderline image: attaching it holds the Event for review
+  createdAt      DateTime     @default(now())
 
   @@index([status, createdAt])
 }
