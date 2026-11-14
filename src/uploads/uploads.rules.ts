@@ -6,6 +6,8 @@ export type CoverType = (typeof COVER_TYPES)[number];
 export const UPLOAD_URL_TTL_SECONDS = 10 * 60;
 /** Requests for signed URLs per user per hour (each URL can create one object). */
 export const UPLOADS_PER_HOUR = 20;
+/** How long an Upload may sit unattached (Pending, Rejected, replaced) before cleanup deletes it. */
+export const UPLOAD_GRACE_MS = 24 * 60 * 60 * 1000;
 
 const EXT: Record<CoverType, string> = {
   'image/jpeg': 'jpg',

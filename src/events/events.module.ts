@@ -7,6 +7,7 @@ import { EventsController } from './events.controller';
 import { EventsService } from './events.service';
 import { HostedEventsController } from './hosted-events.controller';
 import { HostedEventsService } from './hosted-events.service';
+import { StorageCleanupService } from './storage-cleanup.service';
 
 // events → catalog/reservations are allowed directions (ADR-0003): Tags live in catalog, and
 // calling an Event off voids its Reservations.
@@ -17,7 +18,7 @@ import { HostedEventsService } from './hosted-events.service';
     HostedEventsController,
     AdminListedEventsController,
   ],
-  providers: [EventsService, HostedEventsService],
+  providers: [EventsService, HostedEventsService, StorageCleanupService],
   exports: [EventsService, HostedEventsService],
 })
 export class EventsModule {}
