@@ -1,3 +1,4 @@
+import { coverImageUrl } from '../uploads/object-storage';
 import { normalizeTags } from '../catalog/catalog.rules';
 import { AppError } from '../common/errors/app-error';
 import type {
@@ -118,6 +119,7 @@ export function toDetail(e: EventWithRefs): EventDetail {
     capacity: e.capacity,
     reservedCount: e.reservedCount,
     tags: e.tags.map((t) => t.tag.name).sort(),
+    coverImageUrl: coverImageUrl(e.coverImageKey),
     cancelledAt: e.cancelledAt?.toISOString() ?? null,
   };
 }

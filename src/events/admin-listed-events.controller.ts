@@ -1,3 +1,4 @@
+import type { SessionUser } from '../auth/auth';
 import { NO_STORE } from '../common/http/cache';
 import {
   Body,
@@ -11,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ZodResponse } from 'nestjs-zod';
-import { Roles } from '../common/auth/auth.decorators';
+import { CurrentUser, Roles } from '../common/auth/auth.decorators';
 import {
   CreateListedEventDto,
   EventDetailDto,
@@ -42,17 +43,21 @@ export class AdminListedEventsController {
 
   @Post()
   @ZodResponse({ status: 201, type: EventDetailDto })
-  create(@Body() body: CreateListedEventDto) {
-    return this.events.createListed(body);
+  create(
+    @CurrentUser() admin: SessionUser,
+    @Body() body: CreateListedEventDto,
+  ) {
+    return this.events.createListed(admin.id, body);
   }
 
   @Patch(':id')
   @ZodResponse({ status: 200, type: EventDetailDto })
   update(
+    @CurrentUser() admin: SessionUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: UpdateListedEventDto,
   ) {
-    return this.events.updateListed(id, body);
+    return this.events.updateListed(admin.id, id, body);
   }
 
   @Post(':id/publish')

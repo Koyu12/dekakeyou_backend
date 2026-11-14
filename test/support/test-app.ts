@@ -5,10 +5,14 @@ import { App } from 'supertest/types';
 import { AppModule } from '../../src/app.module';
 import { configureApp, setupSwagger } from '../../src/app.setup';
 import type { Verdict } from '../../src/content-check/content-check.rules';
-import { TextModerator } from '../../src/content-check/text-moderator';
+import {
+  ImageModerator,
+  TextModerator,
+} from '../../src/content-check/text-moderator';
 import { Email, EmailSender } from '../../src/notifications/email-sender';
 import { Notifier } from '../../src/notifications/notifier';
 import { PrismaService } from '../../src/prisma/prisma.service';
+import { ObjectStorage } from '../../src/uploads/object-storage';
 
 // Captures outgoing email instead of sending it, so tests can read login codes.
 export class CapturingEmailSender extends EmailSender {
@@ -38,11 +42,51 @@ export class FakeTextModerator extends TextModerator {
   }
 }
 
+// Stands in for the image-safety API; tests set the next verdict (default: pass).
+export class FakeImageModerator extends ImageModerator {
+  verdict: Verdict = { result: 'PASS' };
+  checked = 0;
+  check() {
+    this.checked++;
+    return Promise.resolve(this.verdict);
+  }
+}
+
+// Stands in for R2. `put` plays the browser uploading to the signed URL.
+export class InMemoryStorage extends ObjectStorage {
+  readonly objects = new Map<string, Uint8Array>();
+  readonly signed = new Map<string, { contentType: string; size: number }>();
+  signPut(key: string, contentType: string, size: number) {
+    this.signed.set(key, { contentType, size });
+    return Promise.resolve(`https://r2.test/${key}?X-Amz-Signature=fake`);
+  }
+  /** Uploads to a signed URL; like R2, refuses a size other than the signed one. */
+  put(uploadUrl: string, bytes: Uint8Array) {
+    const key = new URL(uploadUrl).pathname.slice(1);
+    const signed = this.signed.get(key);
+    if (!signed || signed.size !== bytes.length)
+      throw new Error('signature mismatch');
+    this.objects.set(key, bytes);
+  }
+  size(key: string) {
+    return Promise.resolve(this.objects.get(key)?.length ?? null);
+  }
+  read(key: string) {
+    return Promise.resolve(this.objects.get(key)!);
+  }
+  delete(key: string) {
+    this.objects.delete(key);
+    return Promise.resolve();
+  }
+}
+
 export type TestApp = {
   app: INestApplication<App>;
   prisma: PrismaService;
   emails: CapturingEmailSender;
   moderator: FakeTextModerator;
+  imageModerator: FakeImageModerator;
+  storage: InMemoryStorage;
   notifier: Notifier;
 };
 
@@ -52,12 +96,18 @@ export async function createTestApp(
 ): Promise<TestApp> {
   const emails = new CapturingEmailSender();
   const moderator = new FakeTextModerator();
+  const imageModerator = new FakeImageModerator();
+  const storage = new InMemoryStorage();
   let builder = Test.createTestingModule({
     imports: [AppModule],
     controllers: options.controllers ?? [],
   })
     .overrideProvider(TextModerator)
-    .useValue(moderator);
+    .useValue(moderator)
+    .overrideProvider(ImageModerator)
+    .useValue(imageModerator)
+    .overrideProvider(ObjectStorage)
+    .useValue(storage);
   if (!options.realEmailSender) {
     builder = builder.overrideProvider(EmailSender).useValue(emails);
   }
@@ -71,6 +121,8 @@ export async function createTestApp(
     prisma: app.get(PrismaService),
     emails,
     moderator,
+    imageModerator,
+    storage,
     notifier: app.get(Notifier),
   };
 }

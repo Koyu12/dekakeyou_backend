@@ -25,6 +25,21 @@ Better Auth serves `/api/auth/*` (email OTP, Google, sign-out, update-user). Eve
   docker compose exec db psql -U postgres -d dekakeyou -c "UPDATE \"User\" SET role = 'admin' WHERE email = 'you@example.com';"
   ```
 
+## Cover Images (Cloudflare R2)
+
+The browser uploads straight to R2; the API only signs and checks:
+
+1. `POST /api/v1/uploads` with `{ contentType, size }` (JPEG, PNG or WebP, at most 5 MB) returns a Pending Upload and a signed URL, valid for 10 minutes.
+2. The browser `PUT`s the file to `uploadUrl` with exactly the returned `headers`.
+3. `POST /api/v1/uploads/:id/verify` checks the real file type and runs the image check. The Upload becomes Approved or Rejected (with `rejectedReason`).
+4. Send the Approved Upload's id as `coverUploadId` when creating or editing an Event (`null` removes the Cover Image). Events return `coverImageUrl`.
+
+Set `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` and `R2_PUBLIC_URL` to enable it. Without them, uploads answer 503. The bucket needs public read through `R2_PUBLIC_URL`, and a CORS rule for browser uploads:
+
+```json
+[{ "AllowedOrigins": ["http://localhost:3000", "https://your-site"], "AllowedMethods": ["PUT"], "AllowedHeaders": ["content-type"], "MaxAgeSeconds": 3600 }]
+```
+
 ## Tests
 
 ```bash

@@ -1,7 +1,10 @@
 import { Global, Module } from '@nestjs/common';
 import { ContentCheckService } from './content-check.service';
 import {
+  ImageModerator,
+  NoImageModerator,
   NoTextModerator,
+  OpenAiImageModerator,
   OpenAiTextModerator,
   TextModerator,
 } from './text-moderator';
@@ -16,6 +19,13 @@ import {
         process.env.OPENAI_API_KEY
           ? new OpenAiTextModerator(process.env.OPENAI_API_KEY)
           : new NoTextModerator(),
+    },
+    {
+      provide: ImageModerator,
+      useFactory: () =>
+        process.env.OPENAI_API_KEY
+          ? new OpenAiImageModerator(process.env.OPENAI_API_KEY)
+          : new NoImageModerator(),
     },
     ContentCheckService,
   ],

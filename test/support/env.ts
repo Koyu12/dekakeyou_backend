@@ -10,3 +10,6 @@ process.env.BETTER_AUTH_URL = 'http://localhost:3000';
 process.env.BETTER_AUTH_SECRET = 'test-secret-at-least-32-characters-long!!';
 process.env.GOOGLE_CLIENT_ID = 'test-google-client-id';
 process.env.GOOGLE_CLIENT_SECRET = 'test-google-client-secret';
+
+// Cover Image URLs are built from the bucket's public address.
+process.env.R2_PUBLIC_URL = 'https://cdn.test';

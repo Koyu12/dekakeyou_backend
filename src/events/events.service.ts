@@ -5,6 +5,7 @@ import type { Prisma } from '../generated/prisma/client';
 import type { EventStatus } from '../generated/prisma/enums';
 import { Notifier } from '../notifications/notifier';
 import { PrismaService } from '../prisma/prisma.service';
+import { UploadsService } from '../uploads/uploads.service';
 import { ReservationsService } from '../reservations/reservations.service';
 import { normalizeTag } from '../catalog/catalog.rules';
 import {
@@ -49,6 +50,7 @@ export class EventsService {
     private readonly contentCheck: ContentCheckService,
     private readonly reservations: ReservationsService,
     private readonly notifier: Notifier,
+    private readonly uploads: UploadsService,
   ) {}
 
   // ─── Admin moderation (called by moderation inside its transaction; events owns status) ───
@@ -185,7 +187,10 @@ export class EventsService {
     return toDetail(await this.findListed(id));
   }
 
-  async createListed(input: CreateListedEventDto): Promise<EventDetail> {
+  async createListed(
+    adminId: string,
+    input: CreateListedEventDto,
+  ): Promise<EventDetail> {
     const data = {
       ...normalizePlace(input),
       startsAt: new Date(input.startsAt),
@@ -202,10 +207,15 @@ export class EventsService {
     );
 
     return this.prisma.$transaction(async (tx) => {
+      // The Admin's own posts: a borderline image is their call, so needsReview is ignored.
+      const cover = input.coverUploadId
+        ? await this.uploads.claimCover(tx, adminId, input.coverUploadId)
+        : null;
       const { id } = await tx.event.create({
         data: {
           slug: makeSlug(input.title),
           kind: 'LISTED',
+          coverImageKey: cover?.key ?? null,
           status: 'DRAFT',
           source: 'MANUAL',
           title: input.title,
@@ -225,6 +235,7 @@ export class EventsService {
   }
 
   async updateListed(
+    adminId: string,
     id: string,
     input: UpdateListedEventDto,
   ): Promise<EventDetail> {
@@ -258,9 +269,15 @@ export class EventsService {
     );
 
     return this.prisma.$transaction(async (tx) => {
+      const cover = input.coverUploadId
+        ? await this.uploads.claimCover(tx, adminId, input.coverUploadId, id)
+        : null;
       await tx.event.update({
         where: { id },
         data: {
+          ...(input.coverUploadId !== undefined
+            ? { coverImageKey: cover?.key ?? null }
+            : {}),
           // slug is deliberately never changed, so shared links keep working
           title: input.title,
           description: input.description,

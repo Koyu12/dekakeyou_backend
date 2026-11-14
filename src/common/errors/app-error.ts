@@ -24,7 +24,12 @@ export type ErrorCode =
   | 'NOT_RESERVED'
   | 'WITHDRAW_CLOSED'
   // Moderation
-  | 'ALREADY_REPORTED';
+  | 'ALREADY_REPORTED'
+  // Uploads
+  | 'UPLOAD_NOT_FOUND'
+  | 'UPLOAD_NOT_READY'
+  | 'UPLOAD_NOT_USABLE'
+  | 'UPLOADS_UNAVAILABLE';
 
 export type ErrorBody = {
   code: string;

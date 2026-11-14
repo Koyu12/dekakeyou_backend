@@ -24,6 +24,7 @@ const BaseEventFields = z.object({
   endsAt: dateTimeInput,
   timeZone: z.string().refine(isValidTimeZone, 'Unknown IANA time zone'),
   tags: z.array(z.string().max(60)).max(20).optional(), // normalized + capped at 5 by the catalog rules
+  coverUploadId: z.uuid().nullable().optional(), // an Approved Upload of yours; null removes the Cover Image
 });
 
 const ListedEventFields = BaseEventFields.extend({
@@ -74,6 +75,7 @@ export const EventDetailSchema = z.object({
   capacity: z.number().int().nullable(),
   reservedCount: z.number().int(),
   tags: z.array(z.string()),
+  coverImageUrl: z.string().nullable(),
   cancelledAt: z.iso.datetime().nullable(),
 });
 export class EventDetailDto extends createZodDto(EventDetailSchema) {}
