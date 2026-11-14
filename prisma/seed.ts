@@ -3,7 +3,14 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../src/generated/prisma/client';
 
 // Placeholder starting lists; the Admin edits them later without a deploy.
-const categories = ['Anime & Manga', 'Cosplay', 'J-Music', 'Idol', 'Gaming', 'Japanese Culture'];
+const categories = [
+  'Anime & Manga',
+  'Cosplay',
+  'J-Music',
+  'Idol',
+  'Gaming',
+  'Japanese Culture',
+];
 
 const cities: [name: string, province: string][] = [
   ['Jakarta', 'DKI Jakarta'],
@@ -24,10 +31,16 @@ const cities: [name: string, province: string][] = [
 ];
 
 async function main() {
-  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
+  const prisma = new PrismaClient({
+    adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+  });
   try {
     for (const [sortOrder, name] of categories.entries()) {
-      await prisma.category.upsert({ where: { name }, create: { name, sortOrder }, update: {} });
+      await prisma.category.upsert({
+        where: { name },
+        create: { name, sortOrder },
+        update: {},
+      });
     }
     for (const [name, province] of cities) {
       await prisma.city.upsert({
@@ -36,7 +49,9 @@ async function main() {
         update: {},
       });
     }
-    console.log(`Seeded ${categories.length} categories and ${cities.length} cities`);
+    console.log(
+      `Seeded ${categories.length} categories and ${cities.length} cities`,
+    );
   } finally {
     await prisma.$disconnect();
   }
