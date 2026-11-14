@@ -5,6 +5,7 @@ import { ContentCheckService } from '../content-check/content-check.service';
 import type { Prisma } from '../generated/prisma/client';
 import type { EventStatus, ReviewReason } from '../generated/prisma/enums';
 import { AppError } from '../common/errors/app-error';
+import { Notifier } from '../notifications/notifier';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReservationsService } from '../reservations/reservations.service';
 import {
@@ -46,6 +47,7 @@ export class HostedEventsService {
     private readonly reservations: ReservationsService,
     private readonly catalog: CatalogService,
     private readonly contentCheck: ContentCheckService,
+    private readonly notifier: Notifier,
   ) {}
 
   /**
@@ -88,7 +90,15 @@ export class HostedEventsService {
       where: { id },
       data: { status: 'CANCELLED', cancelledAt: new Date() },
     });
-    await this.reservations.voidAllForEvent(tx, id);
+    const attendees = await this.reservations.voidAllForEvent(tx, id);
+    await this.notifier.queue(
+      tx,
+      attendees.map((userId) => ({
+        type: 'EVENT_CANCELLED',
+        eventId: id,
+        userId,
+      })),
+    );
   }
 
   /** Calls the Event off: it stays visible as Cancelled and every Active Reservation becomes Void. */

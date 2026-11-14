@@ -3,6 +3,7 @@ import { CatalogService } from '../catalog/catalog.service';
 import { ContentCheckService } from '../content-check/content-check.service';
 import type { Prisma } from '../generated/prisma/client';
 import type { EventStatus } from '../generated/prisma/enums';
+import { Notifier } from '../notifications/notifier';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReservationsService } from '../reservations/reservations.service';
 import { normalizeTag } from '../catalog/catalog.rules';
@@ -47,6 +48,7 @@ export class EventsService {
     private readonly catalog: CatalogService,
     private readonly contentCheck: ContentCheckService,
     private readonly reservations: ReservationsService,
+    private readonly notifier: Notifier,
   ) {}
 
   // ─── Admin moderation (called by moderation inside its transaction; events owns status) ───
@@ -89,11 +91,28 @@ export class EventsService {
     if (!canRemove(event.status)) {
       throw statusError(`A ${event.status} Event can't be removed`);
     }
-    await tx.event.update({
+    const { organizerId } = await tx.event.update({
       where: { id },
       data: { status: 'REMOVED', removedReason: reason, removedAt: new Date() },
     });
-    return this.reservations.voidAllForEvent(tx, id);
+    const attendees = await this.reservations.voidAllForEvent(tx, id);
+    await this.notifier.queue(tx, [
+      ...attendees.map((userId) => ({
+        type: 'EVENT_REMOVED' as const,
+        eventId: id,
+        userId,
+      })),
+      ...(organizerId
+        ? [
+            {
+              type: 'EVENT_REMOVED_ORGANIZER' as const,
+              eventId: id,
+              userId: organizerId,
+            },
+          ]
+        : []),
+    ]);
+    return attendees;
   }
 
   async findPublicBySlug(slug: string): Promise<EventDetail> {
