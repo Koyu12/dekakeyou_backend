@@ -11,6 +11,7 @@ import {
   CoverType,
   fileProblem,
   typeOfKey,
+  UPLOAD_GRACE_MS,
   UPLOAD_URL_TTL_SECONDS,
   UPLOADS_PER_HOUR,
 } from './uploads.rules';
@@ -157,6 +158,30 @@ export class UploadsService {
       throw unusable('This image is already the Cover Image of another Event');
     }
     return { key: upload.storageKey, needsReview: upload.needsReview };
+  }
+
+  /**
+   * Deletes Uploads no Event uses (Pending, Rejected, replaced or never attached) once they are
+   * older than the grace period. Rows go first, so a file is never deleted while still attached;
+   * running it twice finds nothing the second time.
+   */
+  async purgeUnattached(graceMs = UPLOAD_GRACE_MS): Promise<number> {
+    const cutoff = new Date(Date.now() - graceMs);
+    // shortcut: an attach committing in the same instant as this delete can lose its file; fine at daily runs on day-old Uploads.
+    const gone = await this.prisma.$queryRaw<{ storageKey: string }[]>`
+      DELETE FROM "Upload" u
+      WHERE u."createdAt" < ${cutoff}
+        AND NOT EXISTS (SELECT 1 FROM "Event" e WHERE e."coverImageKey" = u."storageKey")
+      RETURNING u."storageKey"`;
+    for (const { storageKey } of gone) {
+      // A file left behind costs a few KB; a crash here must not undo the run.
+      await this.storage
+        .delete(storageKey)
+        .catch((e: unknown) =>
+          this.logger.warn(`Could not delete ${storageKey}: ${String(e)}`),
+        );
+    }
+    return gone.length;
   }
 
   private async findOwn(userId: string, id: string) {
