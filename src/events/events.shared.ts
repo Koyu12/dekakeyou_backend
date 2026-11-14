@@ -47,7 +47,7 @@ export function mergePlace(input: Partial<PlaceInput>, current: PlaceInput) {
   const pick = <K extends keyof PlaceInput>(k: K) =>
     input[k] !== undefined ? input[k] : current[k];
   return normalizePlace({
-    isOnline: pick('isOnline') as boolean,
+    isOnline: input.isOnline ?? current.isOnline,
     cityId: pick('cityId'),
     venueName: pick('venueName'),
     venueAddress: pick('venueAddress'),
