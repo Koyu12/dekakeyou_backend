@@ -79,3 +79,36 @@ export const ModerationResultSchema = z.object({
 });
 export class ModerationResultDto extends createZodDto(ModerationResultSchema) {}
 export type ModerationResult = z.infer<typeof ModerationResultSchema>;
+
+// ─── Admin: users and bans ──────────────────────────────────────────
+
+export const AccountSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  email: z.string(),
+  role: z.string().nullable(),
+  banned: z.boolean().nullable(),
+  banReason: z.string().nullable(),
+  banExpires: z.iso.datetime().nullable(),
+});
+export class AccountDto extends createZodDto(AccountSchema) {}
+export type Account = z.infer<typeof AccountSchema>;
+
+export class FindAccountQuery extends createZodDto(
+  z.object({ email: z.email() }),
+) {}
+
+export class BanUserDto extends createZodDto(
+  z.object({
+    reason: z.string().trim().min(3).max(500), // also the reason on the user's Removed Events
+    expiresAt: z.iso.datetime({ offset: true }).optional(), // omit for a permanent ban
+  }),
+) {}
+
+export const BanResultSchema = z.object({
+  account: AccountSchema,
+  removedEvents: z.number().int(),
+  withdrawnReservations: z.number().int(),
+});
+export class BanResultDto extends createZodDto(BanResultSchema) {}
+export type BanResult = z.infer<typeof BanResultSchema>;

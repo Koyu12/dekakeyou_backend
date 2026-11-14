@@ -32,6 +32,36 @@ export class ReservationsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
+   * Withdraws every Active place a user holds on Events that haven't ended, freeing them for
+   * others (a ban or account deletion). Past attendance stays as it was. Each Event row is
+   * locked as joins do; locks are taken in id order so concurrent calls can't deadlock.
+   * Runs in the caller's transaction. Returns how many places were freed.
+   */
+  async withdrawAllForAttendee(tx: Tx, attendeeId: string): Promise<number> {
+    const active = await tx.reservation.findMany({
+      where: {
+        attendeeId,
+        status: 'ACTIVE',
+        event: { endsAt: { gt: new Date() } },
+      },
+      select: { eventId: true },
+      orderBy: { eventId: 'asc' },
+    });
+    for (const { eventId } of active) {
+      await lockEvent(tx, eventId);
+      await tx.event.update({
+        where: { id: eventId },
+        data: { reservedCount: { decrement: 1 } },
+      });
+      await tx.reservation.update({
+        where: { eventId_attendeeId: { eventId, attendeeId } },
+        data: { status: 'WITHDRAWN' },
+      });
+    }
+    return active.length;
+  }
+
+  /**
    * Voids every Active Reservation of an Event whose Event was called off (cancelled or removed).
    * Runs inside the caller's transaction, which must already hold the Event-row lock.
    * Returns the affected Attendees, e.g. to notify them.
