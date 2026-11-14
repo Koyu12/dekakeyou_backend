@@ -44,6 +44,34 @@ export class AccountsService {
     await tx.session.deleteMany({ where: { userId } });
   }
 
+  /**
+   * Account deletion: the row stays (past Events and Reports still point at it) but holds no
+   * personal data, and its email is freed so signing up again makes a fresh account.
+   */
+  async anonymize(tx: Prisma.TransactionClient, userId: string) {
+    const user = await tx.user.findUnique({ where: { id: userId } });
+    if (!user || user.deletedAt) {
+      throw new AppError('NOT_FOUND', 404, 'User not found');
+    }
+    await tx.user.update({
+      where: { id: userId },
+      data: {
+        name: 'Deleted user',
+        email: `deleted-${userId}@deleted.invalid`,
+        emailVerified: false,
+        image: null,
+        role: 'user',
+        deletedAt: new Date(),
+      },
+    });
+    await tx.session.deleteMany({ where: { userId } });
+    await tx.account.deleteMany({ where: { userId } });
+    // Pending one-time codes are keyed by email.
+    await tx.verification.deleteMany({
+      where: { identifier: { contains: user.email } },
+    });
+  }
+
   async unban(userId: string) {
     const { count } = await this.prisma.user.updateMany({
       where: { id: userId },
