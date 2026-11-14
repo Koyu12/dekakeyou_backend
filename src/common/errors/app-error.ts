@@ -13,7 +13,15 @@ export type ErrorCode =
   | 'INVALID_STATUS_CHANGE'
   | 'CATEGORY_NOT_AVAILABLE'
   | 'CITY_NOT_AVAILABLE'
-  | 'CAPACITY_BELOW_RESERVED';
+  | 'CAPACITY_BELOW_RESERVED'
+  // Reservations
+  | 'EVENT_NOT_JOINABLE'
+  | 'JOIN_CLOSED'
+  | 'OWN_EVENT'
+  | 'ALREADY_RESERVED'
+  | 'EVENT_FULL'
+  | 'NOT_RESERVED'
+  | 'WITHDRAW_CLOSED';
 
 export type ErrorBody = {
   code: string;
