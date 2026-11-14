@@ -2,7 +2,8 @@ import { Injectable } from '@nestjs/common';
 import type { SessionUser } from '../auth/auth';
 import { CatalogService } from '../catalog/catalog.service';
 import { ContentCheckService } from '../content-check/content-check.service';
-import type { EventStatus } from '../generated/prisma/enums';
+import type { Prisma } from '../generated/prisma/client';
+import type { EventStatus, ReviewReason } from '../generated/prisma/enums';
 import { AppError } from '../common/errors/app-error';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReservationsService } from '../reservations/reservations.service';
@@ -46,6 +47,22 @@ export class HostedEventsService {
     private readonly catalog: CatalogService,
     private readonly contentCheck: ContentCheckService,
   ) {}
+
+  /**
+   * Hides a Published Event until the Admin decides (moderation calls this; events owns status).
+   * Runs in the caller's transaction, which should hold the Event-row lock. Existing
+   * Reservations stay Active; joining is blocked because the Event is no longer Published.
+   */
+  async holdForReview(
+    tx: Prisma.TransactionClient,
+    eventId: string,
+    reason: ReviewReason,
+  ) {
+    await tx.event.updateMany({
+      where: { id: eventId, status: 'PUBLISHED' },
+      data: { status: 'UNDER_REVIEW', reviewReason: reason },
+    });
+  }
 
   /** Calls the Event off: it stays visible as Cancelled and every Active Reservation becomes Void. */
   async cancel(user: SessionUser, id: string): Promise<OrganizerEvent> {

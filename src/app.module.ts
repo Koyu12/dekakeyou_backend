@@ -8,6 +8,7 @@ import { EventsModule } from './events/events.module';
 import { AppExceptionFilter } from './common/errors/app-exception.filter';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { ModerationModule } from './moderation/moderation.module';
 import { ReservationsModule } from './reservations/reservations.module';
 
 @Module({
@@ -19,6 +20,7 @@ import { ReservationsModule } from './reservations/reservations.module';
     CatalogModule,
     EventsModule,
     ReservationsModule,
+    ModerationModule,
   ],
   providers: [
     { provide: APP_PIPE, useClass: ZodValidationPipe },

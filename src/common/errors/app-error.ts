@@ -22,7 +22,9 @@ export type ErrorCode =
   | 'ALREADY_RESERVED'
   | 'EVENT_FULL'
   | 'NOT_RESERVED'
-  | 'WITHDRAW_CLOSED';
+  | 'WITHDRAW_CLOSED'
+  // Moderation
+  | 'ALREADY_REPORTED';
 
 export type ErrorBody = {
   code: string;
