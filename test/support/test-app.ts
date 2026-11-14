@@ -7,12 +7,19 @@ import { configureApp, setupSwagger } from '../../src/app.setup';
 import type { Verdict } from '../../src/content-check/content-check.rules';
 import { TextModerator } from '../../src/content-check/text-moderator';
 import { Email, EmailSender } from '../../src/notifications/email-sender';
+import { Notifier } from '../../src/notifications/notifier';
 import { PrismaService } from '../../src/prisma/prisma.service';
 
 // Captures outgoing email instead of sending it, so tests can read login codes.
 export class CapturingEmailSender extends EmailSender {
   readonly sent: Email[] = [];
+  /** Sends that throw before succeeding (to exercise job retries). */
+  failNext = 0;
   send(email: Email) {
+    if (this.failNext > 0) {
+      this.failNext--;
+      return Promise.reject(new Error('SMTP is down'));
+    }
     this.sent.push(email);
     return Promise.resolve();
   }
@@ -36,6 +43,7 @@ export type TestApp = {
   prisma: PrismaService;
   emails: CapturingEmailSender;
   moderator: FakeTextModerator;
+  notifier: Notifier;
 };
 
 // Boots the real app (same setup as main.ts) against the test database.
@@ -57,11 +65,18 @@ export async function createTestApp(
   configureApp(app);
   setupSwagger(app);
   await app.init();
-  return { app, prisma: app.get(PrismaService), emails, moderator };
+  return {
+    app,
+    prisma: app.get(PrismaService),
+    emails,
+    moderator,
+    notifier: app.get(Notifier),
+  };
 }
 
-// Empties every table except Prisma's migration history.
+// Empties every table except Prisma's migration history, and drops queued jobs.
 export async function resetDb(prisma: PrismaService) {
+  await prisma.$executeRawUnsafe('DELETE FROM pgboss.job');
   const tables = await prisma.$queryRaw<{ tablename: string }[]>`
     SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'`;
   if (tables.length === 0) return;
@@ -110,4 +125,24 @@ export async function login(
   const cookie = res.headers['set-cookie'] as unknown as string[] | undefined;
   if (!cookie?.length) throw new Error('Sign-in returned no session cookie');
   return cookie.map((c) => c.split(';')[0]).join('; ');
+}
+
+/**
+ * Waits until every queued job has run, so tests can assert on the captured emails.
+ * Retries normally wait with backoff; here they're made due at once.
+ */
+export async function settleJobs(t: TestApp, timeoutMs = 15_000) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    await t.prisma.$executeRawUnsafe(
+      `UPDATE pgboss.job SET start_after = now() WHERE state IN ('created', 'retry') AND start_after > now()`,
+    );
+    const [{ pending }] = await t.prisma.$queryRawUnsafe<{ pending: number }[]>(
+      `SELECT count(*)::int AS pending FROM pgboss.job WHERE state IN ('created', 'retry', 'active')`,
+    );
+    if (pending === 0) return;
+    if (Date.now() > deadline) throw new Error(`${pending} jobs still pending`);
+    if (t.notifier.workerId) t.notifier.boss.notifyWorker(t.notifier.workerId);
+    await new Promise((r) => setTimeout(r, 50));
+  }
 }
