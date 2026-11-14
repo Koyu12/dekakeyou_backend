@@ -48,19 +48,20 @@ export type TestApp = {
 
 // Boots the real app (same setup as main.ts) against the test database.
 export async function createTestApp(
-  options: { controllers?: Type[] } = {},
+  options: { controllers?: Type[]; realEmailSender?: boolean } = {},
 ): Promise<TestApp> {
   const emails = new CapturingEmailSender();
   const moderator = new FakeTextModerator();
-  const moduleRef = await Test.createTestingModule({
+  let builder = Test.createTestingModule({
     imports: [AppModule],
     controllers: options.controllers ?? [],
   })
-    .overrideProvider(EmailSender)
-    .useValue(emails)
     .overrideProvider(TextModerator)
-    .useValue(moderator)
-    .compile();
+    .useValue(moderator);
+  if (!options.realEmailSender) {
+    builder = builder.overrideProvider(EmailSender).useValue(emails);
+  }
+  const moduleRef = await builder.compile();
   const app = moduleRef.createNestApplication<INestApplication<App>>();
   configureApp(app);
   setupSwagger(app);
