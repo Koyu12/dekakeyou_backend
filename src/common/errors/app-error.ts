@@ -12,7 +12,8 @@ export type ErrorCode =
   | 'EVENT_NOT_FOUND'
   | 'INVALID_STATUS_CHANGE'
   | 'CATEGORY_NOT_AVAILABLE'
-  | 'CITY_NOT_AVAILABLE';
+  | 'CITY_NOT_AVAILABLE'
+  | 'CAPACITY_BELOW_RESERVED';
 
 export type ErrorBody = {
   code: string;
