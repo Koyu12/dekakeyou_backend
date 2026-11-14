@@ -7,6 +7,8 @@ import {
   deleteHostedError,
   onlineLinkError,
   canEditListed,
+  decodeCursor,
+  encodeCursor,
   canPublishListed,
   isValidTimeZone,
   makeSlug,
@@ -144,5 +146,34 @@ describe('canCancelHosted', () => {
     expect(canCancelHosted('CANCELLED')).toBe(false);
     expect(canCancelHosted('REMOVED')).toBe(false);
     expect(canCancelHosted('DRAFT')).toBe(false);
+  });
+});
+
+describe('browse cursor', () => {
+  const c = {
+    startsAt: new Date('2027-01-10T03:00:00.000Z'),
+    id: '01900000-0000-7000-8000-000000000001',
+  };
+
+  it('round-trips', () => {
+    expect(decodeCursor(encodeCursor(c))).toEqual(c);
+  });
+
+  it('is URL-safe', () => {
+    expect(encodeCursor(c)).toMatch(/^[A-Za-z0-9_-]+$/);
+  });
+
+  it.each([
+    'garbage',
+    '',
+    Buffer.from('{"a":1}').toString('base64url'),
+    Buffer.from(
+      '["not-a-date","01900000-0000-7000-8000-000000000001"]',
+    ).toString('base64url'),
+    Buffer.from('["2027-01-10T03:00:00.000Z","x; DROP TABLE"]').toString(
+      'base64url',
+    ),
+  ])('rejects %p', (raw) => {
+    expect(decodeCursor(raw)).toBeNull();
   });
 });

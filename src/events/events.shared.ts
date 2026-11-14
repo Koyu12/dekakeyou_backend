@@ -2,7 +2,7 @@ import { normalizeTags } from '../catalog/catalog.rules';
 import { AppError } from '../common/errors/app-error';
 import type { Prisma, PrismaClient } from '../generated/prisma/client';
 import { placeAndTimeError, PUBLIC_STATUSES } from './events.rules';
-import type { EventDetail, OrganizerEvent } from './events.schemas';
+import type { EventCard, EventDetail, OrganizerEvent } from './events.schemas';
 
 // Shared by the Listed and Hosted Event services.
 
@@ -141,4 +141,10 @@ export function tagsOrThrow(raw: string[] | undefined) {
   const result = normalizeTags(raw);
   if ('error' in result) throw invalid(result.error);
   return result.tags;
+}
+
+export function toCard(e: EventWithRefs): EventCard {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { description, ...card } = toDetail(e);
+  return card;
 }

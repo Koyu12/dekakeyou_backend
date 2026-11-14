@@ -3,26 +3,33 @@ import { CatalogService } from '../catalog/catalog.service';
 import type { Prisma } from '../generated/prisma/client';
 import type { EventStatus } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
+import { normalizeTag } from '../catalog/catalog.rules';
 import {
   canCancelListed,
   canEditListed,
   canPublishListed,
+  decodeCursor,
+  encodeCursor,
   makeSlug,
 } from './events.rules';
 import type {
+  BrowseEventsQuery,
   CreateListedEventDto,
   EventDetail,
+  EventPage,
   UpdateListedEventDto,
 } from './events.schemas';
 import {
   assertPlaceAndTime,
   assertRefsAvailable,
+  invalid,
   mergePlace,
   normalizePlace,
   notFound,
   publicEventWhere,
   statusError,
   tagsOrThrow,
+  toCard,
   toDetail,
   withRefs,
 } from './events.shared';
@@ -42,6 +49,52 @@ export class EventsService {
     });
     if (!event) throw notFound();
     return toDetail(event);
+  }
+
+  /** Public browsing: filters combine with AND; pages follow (startsAt, id) so none are skipped. */
+  async browse(query: BrowseEventsQuery): Promise<EventPage> {
+    const and: Prisma.EventWhereInput[] = [publicEventWhere];
+
+    if (!query.includePast) and.push({ endsAt: { gt: new Date() } });
+    if (query.category) and.push({ categoryId: query.category });
+    if (query.city)
+      and.push({ OR: [{ cityId: query.city }, { isOnline: true }] });
+    if (query.from) and.push({ endsAt: { gte: new Date(query.from) } });
+    if (query.to) and.push({ startsAt: { lte: new Date(query.to) } });
+    // shortcut: ILIKE without an index; add pg_trgm (or full-text search) once Event counts grow.
+    if (query.q)
+      and.push({ title: { contains: query.q, mode: 'insensitive' } });
+    if (query.tag !== undefined) {
+      const tag = normalizeTag(query.tag);
+      if (!tag) return { items: [], nextCursor: null };
+      and.push({ tags: { some: { tag: { name: tag } } } });
+    }
+    if (query.cursor) {
+      const cursor = decodeCursor(query.cursor);
+      if (!cursor) throw invalid('Invalid cursor');
+      and.push({
+        OR: [
+          { startsAt: { gt: cursor.startsAt } },
+          { startsAt: cursor.startsAt, id: { gt: cursor.id } },
+        ],
+      });
+    }
+
+    const rows = await this.prisma.event.findMany({
+      where: { AND: and },
+      include: withRefs,
+      orderBy: [{ startsAt: 'asc' }, { id: 'asc' }],
+      take: query.limit + 1, // one extra tells us whether another page exists
+    });
+    const page = rows.slice(0, query.limit);
+    const last = page.at(-1);
+    return {
+      items: page.map(toCard),
+      nextCursor:
+        rows.length > query.limit && last
+          ? encodeCursor({ startsAt: last.startsAt, id: last.id })
+          : null,
+    };
   }
 
   async listListedForAdmin(): Promise<EventDetail[]> {

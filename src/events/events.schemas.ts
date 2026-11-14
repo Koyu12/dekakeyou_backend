@@ -85,3 +85,30 @@ export const OrganizerEventSchema = EventDetailSchema.extend({
 });
 export class OrganizerEventDto extends createZodDto(OrganizerEventSchema) {}
 export type OrganizerEvent = z.infer<typeof OrganizerEventSchema>;
+
+// ─── Browsing ───────────────────────────────────────────────────────
+
+export class BrowseEventsQuery extends createZodDto(
+  z.object({
+    category: z.uuid().optional(),
+    city: z.uuid().optional(), // Online Events match every City
+    tag: z.string().max(60).optional(),
+    q: z.string().trim().min(1).max(100).optional(), // title search
+    from: dateTimeInput.optional(), // Events still running at or after this moment
+    to: dateTimeInput.optional(), // Events starting at or before this moment
+    includePast: z.stringbool().default(false),
+    cursor: z.string().max(200).optional(),
+    limit: z.coerce.number().int().min(1).max(50).default(20),
+  }),
+) {}
+
+// A list item: the public detail without the long description.
+export const EventCardSchema = EventDetailSchema.omit({ description: true });
+export type EventCard = z.infer<typeof EventCardSchema>;
+
+export const EventPageSchema = z.object({
+  items: z.array(EventCardSchema),
+  nextCursor: z.string().nullable(), // pass back as ?cursor= for the next page
+});
+export class EventPageDto extends createZodDto(EventPageSchema) {}
+export type EventPage = z.infer<typeof EventPageSchema>;
