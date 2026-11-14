@@ -62,3 +62,47 @@ export function placeAndTimeError(event: Place) {
   if (!event.isOnline && !event.cityId) return 'An offline Event needs a City';
   return null;
 }
+
+// ─── Hosted Events ──────────────────────────────────────────────────
+
+export const HOSTED_EVENTS_PER_DAY = 3;
+
+/** How many Hosted Events a user may still create, given how many they created in the last 24h. */
+export function canCreateHosted(createdInLast24h: number) {
+  return createdInLast24h < HOSTED_EVENTS_PER_DAY;
+}
+
+/** Hosted Events are joined over a link when online; Attendees need it. */
+export function onlineLinkError(event: {
+  isOnline: boolean;
+  onlineUrl: string | null;
+}) {
+  return event.isOnline && !event.onlineUrl
+    ? 'An Online Event needs a link'
+    : null;
+}
+
+export function canEditHosted(status: EventStatus) {
+  return status === 'PUBLISHED' || status === 'UNDER_REVIEW';
+}
+
+/**
+ * A real delete is for mistakes nobody has acted on yet. Cancelled Events stay visible to their
+ * Attendees, and Events Under Review or Removed are kept as moderation evidence.
+ */
+export function deleteHostedError(
+  status: EventStatus,
+  activeReservations: number,
+) {
+  if (status !== 'PUBLISHED') return `A ${status} Event can't be deleted`;
+  if (activeReservations > 0)
+    return 'People have already joined; cancel the Event instead';
+  return null;
+}
+
+/** Capacity can never drop below the places already taken. */
+export function capacityError(capacity: number | null, reservedCount: number) {
+  return capacity !== null && capacity < reservedCount
+    ? `Capacity can't be lower than the ${reservedCount} places already taken`
+    : null;
+}

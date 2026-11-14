@@ -6,8 +6,13 @@ import { isValidTimeZone } from './events.rules';
 const dateTimeInput = z.iso.datetime({ offset: true });
 const optionalText = (max: number) =>
   z.string().trim().max(max).nullable().optional();
+const optionalHttpUrl = z
+  .url({ protocol: /^https?$/ })
+  .max(500)
+  .nullable()
+  .optional();
 
-const ListedEventFields = z.object({
+const BaseEventFields = z.object({
   title: z.string().trim().min(3).max(120),
   description: z.string().max(5000).optional(), // Markdown, rendered with raw HTML disabled
   categoryId: z.uuid(),
@@ -18,19 +23,27 @@ const ListedEventFields = z.object({
   startsAt: dateTimeInput,
   endsAt: dateTimeInput,
   timeZone: z.string().refine(isValidTimeZone, 'Unknown IANA time zone'),
-  presenterName: optionalText(120),
-  officialUrl: z
-    .url({ protocol: /^https?$/ })
-    .max(500)
-    .nullable()
-    .optional(),
 });
 
+const ListedEventFields = BaseEventFields.extend({
+  presenterName: optionalText(120),
+  officialUrl: optionalHttpUrl,
+});
 export class CreateListedEventDto extends createZodDto(ListedEventFields) {}
 export class UpdateListedEventDto extends createZodDto(
   ListedEventFields.partial(),
 ) {}
 
+const HostedEventFields = BaseEventFields.extend({
+  onlineUrl: optionalHttpUrl, // required when online; only ever shown to the Organizer and Attendees
+  capacity: z.number().int().min(1).max(100_000).nullable().optional(), // null = unlimited
+});
+export class CreateHostedEventDto extends createZodDto(HostedEventFields) {}
+export class UpdateHostedEventDto extends createZodDto(
+  HostedEventFields.partial(),
+) {}
+
+// Public: safe to cache, so it never contains the online link.
 export const EventDetailSchema = z.object({
   id: z.uuid(),
   slug: z.string(),
@@ -52,9 +65,21 @@ export const EventDetailSchema = z.object({
   startsAt: z.iso.datetime(),
   endsAt: z.iso.datetime(),
   timeZone: z.string(),
-  presenterName: z.string().nullable(),
-  officialUrl: z.string().nullable(),
+  presenterName: z.string().nullable(), // Listed Events
+  officialUrl: z.string().nullable(), // Listed Events
+  organizer: z // Hosted Events
+    .object({ id: z.string(), name: z.string(), image: z.string().nullable() })
+    .nullable(),
+  capacity: z.number().int().nullable(),
+  reservedCount: z.number().int(),
   cancelledAt: z.iso.datetime().nullable(),
 });
 export class EventDetailDto extends createZodDto(EventDetailSchema) {}
 export type EventDetail = z.infer<typeof EventDetailSchema>;
+
+// The Organizer's own view of a Hosted Event: never cached, includes the online link.
+export const OrganizerEventSchema = EventDetailSchema.extend({
+  onlineUrl: z.string().nullable(),
+});
+export class OrganizerEventDto extends createZodDto(OrganizerEventSchema) {}
+export type OrganizerEvent = z.infer<typeof OrganizerEventSchema>;
