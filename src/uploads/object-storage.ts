@@ -8,7 +8,7 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { AppError } from '../common/errors/app-error';
 
-/** Where Cover Images live (Cloudflare R2 in production). Tests override it with an in-memory fake. */
+/** Where Cover Images live (an S3-compatible store in production). Tests override it with an in-memory fake. */
 export abstract class ObjectStorage {
   /** A short-lived URL the browser PUTs the file to, locked to this type and exact size. */
   abstract signPut(
@@ -23,22 +23,24 @@ export abstract class ObjectStorage {
   abstract delete(key: string): Promise<void>;
 }
 
-export type R2Config = {
-  accountId: string;
+export type S3Config = {
+  endpoint: string;
+  region: string;
   accessKeyId: string;
   secretAccessKey: string;
   bucket: string;
 };
 
-/** Cloudflare R2 through its S3-compatible API. */
-export class R2Storage extends ObjectStorage {
+/** Any S3-compatible store: Supabase Storage in production, also Cloudflare R2, AWS S3, MinIO… */
+export class S3Storage extends ObjectStorage {
   private readonly s3: S3Client;
 
-  constructor(private readonly config: R2Config) {
+  constructor(private readonly config: S3Config) {
     super();
     this.s3 = new S3Client({
-      region: 'auto',
-      endpoint: `https://${config.accountId}.r2.cloudflarestorage.com`,
+      region: config.region,
+      endpoint: config.endpoint,
+      forcePathStyle: true, // Supabase requires it; R2 and MinIO accept it
       credentials: {
         accessKeyId: config.accessKeyId,
         secretAccessKey: config.secretAccessKey,
@@ -89,7 +91,7 @@ export class R2Storage extends ObjectStorage {
   }
 }
 
-/** No R2 settings (local development): the app runs, uploading says it's unavailable. */
+/** No storage settings (local development): the app runs, uploading says it's unavailable. */
 export class UnconfiguredStorage extends ObjectStorage {
   private fail(): never {
     throw new AppError(
@@ -112,34 +114,36 @@ export class UnconfiguredStorage extends ObjectStorage {
   }
 }
 
-const R2_VARS = [
-  'R2_ACCOUNT_ID',
-  'R2_ACCESS_KEY_ID',
-  'R2_SECRET_ACCESS_KEY',
-  'R2_BUCKET',
-  'R2_PUBLIC_URL',
+const STORAGE_VARS = [
+  'STORAGE_ENDPOINT',
+  'STORAGE_REGION',
+  'STORAGE_ACCESS_KEY_ID',
+  'STORAGE_SECRET_ACCESS_KEY',
+  'STORAGE_BUCKET',
+  'STORAGE_PUBLIC_URL',
 ] as const;
 
-/** R2 when configured, unavailable otherwise. A partial config fails at startup. */
+/** S3 storage when configured, unavailable otherwise. A partial config fails at startup. */
 export function storageFromEnv(env: NodeJS.ProcessEnv): ObjectStorage {
-  const set = R2_VARS.filter((k) => env[k]?.trim());
+  const set = STORAGE_VARS.filter((k) => env[k]?.trim());
   if (set.length === 0) return new UnconfiguredStorage();
-  const missing = R2_VARS.filter((k) => !env[k]?.trim());
+  const missing = STORAGE_VARS.filter((k) => !env[k]?.trim());
   if (missing.length > 0) {
     throw new Error(
-      `R2 is partly configured (${set.join(', ')} set); also set ${missing.join(', ')}, or unset them all`,
+      `Storage is partly configured (${set.join(', ')} set); also set ${missing.join(', ')}, or unset them all`,
     );
   }
-  return new R2Storage({
-    accountId: env.R2_ACCOUNT_ID!.trim(),
-    accessKeyId: env.R2_ACCESS_KEY_ID!.trim(),
-    secretAccessKey: env.R2_SECRET_ACCESS_KEY!.trim(),
-    bucket: env.R2_BUCKET!.trim(),
+  return new S3Storage({
+    endpoint: env.STORAGE_ENDPOINT!.trim(),
+    region: env.STORAGE_REGION!.trim(),
+    accessKeyId: env.STORAGE_ACCESS_KEY_ID!.trim(),
+    secretAccessKey: env.STORAGE_SECRET_ACCESS_KEY!.trim(),
+    bucket: env.STORAGE_BUCKET!.trim(),
   });
 }
 
-/** The public address of a stored Cover Image (R2_PUBLIC_URL: the bucket's custom domain). */
+/** The public address of a stored Cover Image (STORAGE_PUBLIC_URL: where the bucket is served). */
 export function coverImageUrl(key: string | null): string | null {
-  const base = process.env.R2_PUBLIC_URL?.trim().replace(/\/+$/, '');
+  const base = process.env.STORAGE_PUBLIC_URL?.trim().replace(/\/+$/, '');
   return key && base ? `${base}/${key}` : null;
 }

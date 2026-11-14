@@ -25,20 +25,36 @@ Better Auth serves `/api/auth/*` (email OTP, Google, sign-out, update-user). Eve
   docker compose exec db psql -U postgres -d dekakeyou -c "UPDATE \"User\" SET role = 'admin' WHERE email = 'you@example.com';"
   ```
 
-## Cover Images (Cloudflare R2)
+## Cover Images (Supabase Storage)
 
-The browser uploads straight to R2; the API only signs and checks:
+The browser uploads straight to storage; the API only signs and checks:
 
 1. `POST /api/v1/uploads` with `{ contentType, size }` (JPEG, PNG or WebP, at most 5 MB) returns a Pending Upload and a signed URL, valid for 10 minutes.
 2. The browser `PUT`s the file to `uploadUrl` with exactly the returned `headers`.
 3. `POST /api/v1/uploads/:id/verify` checks the real file type and runs the image check. The Upload becomes Approved or Rejected (with `rejectedReason`).
 4. Send the Approved Upload's id as `coverUploadId` when creating or editing an Event (`null` removes the Cover Image). Events return `coverImageUrl`.
 
-Set `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` and `R2_PUBLIC_URL` to enable it. Without them, uploads answer 503. The bucket needs public read through `R2_PUBLIC_URL`, and a CORS rule for browser uploads:
+Storage is any S3-compatible service, set by `STORAGE_*` env vars. Without them, uploads answer 503; a partial set stops the app at startup.
 
-```json
-[{ "AllowedOrigins": ["http://localhost:3000", "https://your-site"], "AllowedMethods": ["PUT"], "AllowedHeaders": ["content-type"], "MaxAgeSeconds": 3600 }]
+**Supabase setup** (free, no card):
+
+1. Create a project; pick the region nearest your users (e.g. Southeast Asia, Singapore).
+2. Storage → New bucket `covers`, **Public bucket** on. Optional but good: file size limit 5 MB, allowed MIME types `image/jpeg, image/png, image/webp`.
+3. Project Settings → Storage → **S3 Connection**: enable it, copy the endpoint and region, and create an access key.
+4. Fill in `.env`:
+
+```env
+STORAGE_ENDPOINT=https://<project-ref>.storage.supabase.co/storage/v1/s3
+STORAGE_REGION=<region shown there, e.g. ap-southeast-1>
+STORAGE_ACCESS_KEY_ID=<access key id>
+STORAGE_SECRET_ACCESS_KEY=<secret>
+STORAGE_BUCKET=covers
+STORAGE_PUBLIC_URL=https://<project-ref>.supabase.co/storage/v1/object/public/covers
 ```
+
+The S3 keys can write every bucket: keep them on the server only. Free Supabase projects pause after about a week without activity; resume them in the dashboard.
+
+**Other S3 services** work with the same variables. Cloudflare R2, for example: endpoint `https://<account-id>.r2.cloudflarestorage.com`, region `auto`, plus a CORS rule on the bucket allowing `PUT` with `content-type` from the site.
 
 ## Tests
 
