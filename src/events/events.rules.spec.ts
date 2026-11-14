@@ -7,6 +7,8 @@ import {
   deleteHostedError,
   onlineLinkError,
   canEditListed,
+  canRemove,
+  restoredStatus,
   decodeCursor,
   encodeCursor,
   canPublishListed,
@@ -175,5 +177,31 @@ describe('browse cursor', () => {
     ),
   ])('rejects %p', (raw) => {
     expect(decodeCursor(raw)).toBeNull();
+  });
+});
+
+describe('Admin moderation rules', () => {
+  it('restores Under Review to Published', () => {
+    expect(restoredStatus('UNDER_REVIEW', 'REPORTED')).toBe('PUBLISHED');
+    expect(restoredStatus('UNDER_REVIEW', 'AUTO_CHECK')).toBe('PUBLISHED');
+  });
+
+  it('keeps a flagged Cancelled Event Cancelled (only the flag clears)', () => {
+    expect(restoredStatus('CANCELLED', 'REPORTED')).toBe('CANCELLED');
+  });
+
+  it('has nothing to restore otherwise', () => {
+    expect(restoredStatus('PUBLISHED', null)).toBeNull();
+    expect(restoredStatus('CANCELLED', null)).toBeNull();
+    expect(restoredStatus('REMOVED', 'REPORTED')).toBeNull();
+    expect(restoredStatus('DRAFT', null)).toBeNull();
+  });
+
+  it('removes Published, Under Review or Cancelled Events only', () => {
+    expect(canRemove('PUBLISHED')).toBe(true);
+    expect(canRemove('UNDER_REVIEW')).toBe(true);
+    expect(canRemove('CANCELLED')).toBe(true);
+    expect(canRemove('REMOVED')).toBe(false);
+    expect(canRemove('DRAFT')).toBe(false);
   });
 });
