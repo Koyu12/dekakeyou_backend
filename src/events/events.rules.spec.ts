@@ -1,4 +1,5 @@
 import {
+  canCancelHosted,
   canCancelListed,
   canCreateHosted,
   canEditHosted,
@@ -133,5 +134,15 @@ describe('Hosted Event rules', () => {
     expect(capacityError(null, 50)).toBeNull();
     expect(capacityError(20, 20)).toBeNull();
     expect(capacityError(10, 18)).toMatch(/18 places/);
+  });
+});
+
+describe('canCancelHosted', () => {
+  it('cancels Published or Under Review Events only', () => {
+    expect(canCancelHosted('PUBLISHED')).toBe(true);
+    expect(canCancelHosted('UNDER_REVIEW')).toBe(true);
+    expect(canCancelHosted('CANCELLED')).toBe(false);
+    expect(canCancelHosted('REMOVED')).toBe(false);
+    expect(canCancelHosted('DRAFT')).toBe(false);
   });
 });

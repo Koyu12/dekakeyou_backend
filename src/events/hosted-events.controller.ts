@@ -45,6 +45,18 @@ export class HostedEventsController {
     return this.hosted.update(user, id, body);
   }
 
+  /** Calls the Event off: it stays visible as Cancelled and its Reservations become Void. */
+  @Post('events/:id/cancel')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  @ZodResponse({ status: 200, type: OrganizerEventDto })
+  cancel(
+    @CurrentUser() user: SessionUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.hosted.cancel(user, id);
+  }
+
   @Delete('events/:id')
   @HttpCode(204)
   @ApiNoContentResponse()

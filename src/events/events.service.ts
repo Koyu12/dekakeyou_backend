@@ -7,7 +7,6 @@ import {
   canEditListed,
   canPublishListed,
   makeSlug,
-  PUBLIC_STATUSES,
 } from './events.rules';
 import type {
   CreateListedEventDto,
@@ -20,6 +19,7 @@ import {
   mergePlace,
   normalizePlace,
   notFound,
+  publicEventWhere,
   statusError,
   toDetail,
   withRefs,
@@ -32,7 +32,7 @@ export class EventsService {
 
   async findPublicBySlug(slug: string): Promise<EventDetail> {
     const event = await this.prisma.event.findFirst({
-      where: { slug, status: { in: PUBLIC_STATUSES } },
+      where: { slug, ...publicEventWhere },
       include: withRefs,
     });
     if (!event) throw notFound();
