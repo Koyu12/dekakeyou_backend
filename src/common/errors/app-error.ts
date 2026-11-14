@@ -7,7 +7,12 @@ export type ErrorCode =
   | 'NOT_FOUND'
   | 'CONFLICT'
   | 'RATE_LIMITED'
-  | 'INTERNAL_ERROR';
+  | 'INTERNAL_ERROR'
+  // Events
+  | 'EVENT_NOT_FOUND'
+  | 'INVALID_STATUS_CHANGE'
+  | 'CATEGORY_NOT_AVAILABLE'
+  | 'CITY_NOT_AVAILABLE';
 
 export type ErrorBody = {
   code: string;
