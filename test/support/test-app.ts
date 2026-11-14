@@ -142,7 +142,9 @@ export async function settleJobs(t: TestApp, timeoutMs = 15_000) {
     );
     if (pending === 0) return;
     if (Date.now() > deadline) throw new Error(`${pending} jobs still pending`);
-    if (t.notifier.workerId) t.notifier.boss.notifyWorker(t.notifier.workerId);
+    for (const id of [t.notifier.workerId, t.notifier.changeWorkerId]) {
+      if (id) t.notifier.boss.notifyWorker(id);
+    }
     await new Promise((r) => setTimeout(r, 50));
   }
 }

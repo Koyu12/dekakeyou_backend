@@ -5,6 +5,7 @@ import { ContentCheckService } from '../content-check/content-check.service';
 import type { Prisma } from '../generated/prisma/client';
 import type { EventStatus, ReviewReason } from '../generated/prisma/enums';
 import { AppError } from '../common/errors/app-error';
+import { detailsChanged, eventDetails } from '../notifications/notices';
 import { Notifier } from '../notifications/notifier';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReservationsService } from '../reservations/reservations.service';
@@ -270,6 +271,17 @@ export class HostedEventsService {
         },
       });
       if (tags) await this.catalog.setEventTags(tx, id, tags);
+
+      const before = eventDetails(current);
+      const after = eventDetails({
+        ...place,
+        startsAt,
+        endsAt,
+        timeZone: input.timeZone ?? current.timeZone,
+      });
+      if (detailsChanged(before, after)) {
+        await this.notifier.queueDetailsChange(tx, id, before);
+      }
       return toOrganizerView(
         await tx.event.findUniqueOrThrow({ where: { id }, include: withRefs }),
       );
