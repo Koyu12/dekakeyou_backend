@@ -40,3 +40,12 @@ export function normalizeTags(
   }
   return { tags };
 }
+
+/**
+ * Why the Admin can't delete a Category or City, or null. Archiving is always allowed: it is
+ * how an entry that Events still use is retired.
+ */
+export function deleteRefusal(usedByEvents: number): string | null {
+  if (usedByEvents === 0) return null;
+  return `Used by ${usedByEvents} Event${usedByEvents === 1 ? '' : 's'}; archive it instead`;
+}

@@ -29,7 +29,10 @@ export type ErrorCode =
   | 'UPLOAD_NOT_FOUND'
   | 'UPLOAD_NOT_READY'
   | 'UPLOAD_NOT_USABLE'
-  | 'UPLOADS_UNAVAILABLE';
+  | 'UPLOADS_UNAVAILABLE'
+  // Catalog
+  | 'CATALOG_NAME_TAKEN'
+  | 'CATALOG_ENTRY_IN_USE';
 
 export type ErrorBody = {
   code: string;

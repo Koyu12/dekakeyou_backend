@@ -1,4 +1,4 @@
-import { normalizeTag, normalizeTags } from './catalog.rules';
+import { deleteRefusal, normalizeTag, normalizeTags } from './catalog.rules';
 
 describe('normalizeTag', () => {
   it.each([
@@ -51,5 +51,13 @@ describe('normalizeTags', () => {
   it('rejects an invalid Tag with the original spelling in the message', () => {
     const result = normalizeTags(['ok', 'c++']);
     expect('error' in result && result.error).toContain('"c++"');
+  });
+});
+
+describe('deleteRefusal', () => {
+  it('allows deleting only what no Event uses', () => {
+    expect(deleteRefusal(0)).toBeNull();
+    expect(deleteRefusal(1)).toBe('Used by 1 Event; archive it instead');
+    expect(deleteRefusal(3)).toMatch(/Used by 3 Events/);
   });
 });
